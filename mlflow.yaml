@@ -1,0 +1,37 @@
+# Configuration MLflow pour Air Paradis - Sentiment Analysis
+version: "3.8"
+
+services:
+  mlflow:
+    image: python:3.12-slim
+    container_name: mlflow_server
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
+      - MLFLOW_HOST=0.0.0.0
+      - MLFLOW_PORT=5000
+    volumes:
+      - ./mlruns:/mlflow/artifacts
+      - ./mlflow_db:/mlflow
+    working_dir: /mlflow
+    command: >
+      bash -c "
+        pip install mlflow[extras]==2.16.0 &&
+        mlflow server
+          --backend-store-uri sqlite:///mlflow/mlflow.db
+          --default-artifact-root /mlflow/artifacts
+          --host 0.0.0.0
+          --port 5000
+          --serve-artifacts
+      "
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# Configuration alternative pour développement local
+# Utiliser directement: mlflow ui --host 0.0.0.0 --port 5000

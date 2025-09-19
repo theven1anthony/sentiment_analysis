@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  mlflow:
+    image: python:3.12-slim
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./mlruns:/mlflow/mlruns
+      - ./models:/mlflow/models
+    working_dir: /mlflow
+    command: >
+      bash -c "
+        pip install mlflow[extras]==2.16.0 boto3 &&
+        mlflow server
+          --backend-store-uri sqlite:///mlruns/mlflow.db
+          --default-artifact-root ./mlruns
+          --host 0.0.0.0
+          --port 5001
+      "
+    environment:
+      - MLFLOW_TRACKING_URI=http://localhost:5001

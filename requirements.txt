@@ -1,0 +1,28 @@
+# Librairies essentielles uniquement
+
+# API Framework
+fastapi
+uvicorn
+
+# Machine Learning Core
+scikit-learn
+numpy
+pandas
+
+# Visualisation pour EDA
+matplotlib
+seaborn
+wordcloud
+
+# MLOps
+mlflow[extras]
+boto3
+
+# Text Processing (ajouté plus tard)
+# transformers
+# tensorflow
+# torch
+
+# Testing (ajouté plus tard)
+# pytest
+# streamlit

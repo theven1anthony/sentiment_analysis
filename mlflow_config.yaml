@@ -1,0 +1,23 @@
+# Configuration MLflow - Air Paradis Sentiment Analysis
+tracking_uri: http://localhost:5001
+experiments:
+  - simple_models
+  - advanced_models
+  - bert_models
+  - embeddings_comparison
+
+model_registry:
+  stages:
+    - None
+    - Staging
+    - Production
+    - Archived
+
+monitoring:
+  cloudwatch:
+    namespace: "AirParadis/SentimentAnalysis"
+    region: "eu-west-1"
+  alerts:
+    accuracy_threshold: 0.80
+    latency_threshold_ms: 500
+    misclassified_threshold_5min: 3
