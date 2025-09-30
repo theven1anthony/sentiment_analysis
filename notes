@@ -1,0 +1,3 @@
+Création de deux modèles de Deep Learning, dont au moins un avec un layer LSTM.
+Simulation selon deux techniques de pré-traitement (lemmatization, stemming) sur l’un des 2 modèles, afin de choisir la technique pour la suite des simulations.
+Simulation selon 2 approches de word embedding (parmi Word2VEc, Glove, FastText), entraînés avec le jeu de données ou pré-entraînés sur au moins un des 2 modèles de Deep Learning, afin de choisir l’embedding pour la suite des simulations.

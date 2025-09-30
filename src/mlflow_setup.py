@@ -35,7 +35,6 @@ class MLflowSetup:
             try:
                 experiment_id = mlflow.create_experiment(
                     name=exp_name,
-                    artifact_location=f"mlruns/{exp_name}",
                     tags={"project": "air_paradis_sentiment", "type": "sentiment_analysis"}
                 )
                 created_experiments.append((exp_name, experiment_id))

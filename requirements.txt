@@ -1,5 +1,3 @@
-# Librairies essentielles uniquement
-
 # API Framework
 fastapi
 uvicorn
@@ -9,20 +7,39 @@ scikit-learn
 numpy
 pandas
 
-# Visualisation pour EDA
+# Deep Learning & Embeddings
+tensorflow
+torch
+transformers
+sentence-transformers
+
+# Text Processing & NLP
+nltk
+spacy
+gensim
+
+# Visualisation
 matplotlib
 seaborn
 wordcloud
+plotly
 
-# MLOps
-mlflow[extras]
+# MLOps & Tracking
+mlflow
 boto3
 
-# Text Processing (ajouté plus tard)
-# transformers
-# tensorflow
-# torch
+# Testing & Quality
+pytest
+pytest-cov
+black
+flake8
+mypy
 
-# Testing (ajouté plus tard)
-# pytest
-# streamlit
+# Interface utilisateur
+streamlit
+
+# Utilities
+python-dotenv
+requests
+pydantic
+click

@@ -85,4 +85,8 @@ coverage.xml
 # AWS credentials
 .aws/
 aws-credentials.json
-/setup_mlflow.py
+/mlruns_backup_20250926_060323/
+/reports/
+/models/archived/
+/models/production/
+/models/staging/
