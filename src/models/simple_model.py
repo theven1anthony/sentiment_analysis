@@ -279,8 +279,20 @@ def train_simple_model(X_train: pd.Series, y_train: pd.Series,
     # Évaluation sur les données de test
     test_metrics = model.evaluate(X_test, y_test)
 
+    # Calcul de l'AUC si possible
+    auc_score = None
+    try:
+        from sklearn.metrics import roc_auc_score
+        y_pred_proba = model.predict_proba(X_test)
+        auc_score = roc_auc_score(y_test, y_pred_proba[:, 1])
+        test_metrics['auc_score'] = auc_score
+    except Exception as e:
+        print(f"  - Impossible de calculer l'AUC: {e}")
+
     print(f"  - Accuracy test: {test_metrics['accuracy']:.4f}")
     print(f"  - F1-score test: {test_metrics['f1_score']:.4f}")
+    if auc_score is not None:
+        print(f"  - AUC-ROC test: {auc_score:.4f}")
     print(f"  - Temps d'entraînement: {train_results['training_time']:.2f}s")
 
     # Format pour MLflow
@@ -291,6 +303,10 @@ def train_simple_model(X_train: pd.Series, y_train: pd.Series,
         'recall': test_metrics['recall'],
         'training_time': train_results['training_time']
     }
+
+    # Ajouter AUC si calculée
+    if 'auc_score' in test_metrics:
+        metrics['auc_score'] = test_metrics['auc_score']
 
     artifacts = {}  # Pas d'artifacts spéciaux pour le modèle simple
 

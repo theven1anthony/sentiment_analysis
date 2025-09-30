@@ -230,6 +230,44 @@ docker run -p 8000:8000 sentiment-api
 - **AUC-ROC** : Capacité de discrimination
 - **Temps d'entraînement** : Performance opérationnelle
 
+## Résultats des Expérimentations
+
+### 📊 Analyse Comparative des Techniques de Prétraitement
+
+**Expérimentation** : `simple_models_v4` - Impact de la gestion des négations et émotions
+
+#### 🏆 Classement des Configurations
+
+| Rang | Configuration | Technique Gagnante | F1-Score | Accuracy | Temps (s) |
+|------|---------------|-------------------|----------|----------|-----------|
+| 🥇 | Négations=True, Émotions=True | **STEMMING** | **0.7994** | **0.7994** | 15.88 |
+| 🥈 | Négations=True, Émotions=False | **LEMMATIZATION** | **0.7992** | **0.7992** | 16.72 |
+| 🥉 | Négations=False, Émotions=True | **STEMMING** | **0.7978** | **0.7978** | 15.38 |
+| 4️⃣ | Négations=False, Émotions=False | **STEMMING** | **0.7966** | **0.7967** | 14.25 |
+
+#### 📈 Analyse des Tendances
+
+**Impact des négations :**
+- ✅ **Amélioration** : +0.21% en F1-Score
+- La gestion intelligente des négations apporte un gain mesurable
+
+**Impact des émotions :**
+- ✅ **Légère amélioration** : +0.03% en F1-Score
+- Impact minimal mais positif sur les performances
+
+**Technique préférée :**
+- **Stemming** : F1 moyen = 0.7982 (meilleur)
+- **Lemmatization** : F1 moyen = 0.7978
+- Stemming légèrement supérieur en moyenne
+
+#### 💡 Conclusions
+
+1. **Configuration optimale** : Négations=True + Émotions=True + Stemming
+2. **Gestion des négations** : Impact plus important que la préservation des émotions
+3. **Stabilité** : Résultats cohérents entre les configurations
+4. **Gains marginaux** : Différences faibles (~0.3%) mais mesurables
+5. **Recommendation** : Utiliser la configuration complète pour la production
+
 ### Surveillance en production
 - **Seuil d'alerte** : 3 prédictions incorrectes en 5 minutes
 - **Monitoring** : AWS CloudWatch

@@ -116,7 +116,7 @@ def main(technique, description, experiment_name, sample_size, handle_negations,
         print(f"   Options: handle_negations={handle_negations}, handle_emotions={handle_emotions}")
 
         stem_start = time.time()
-        print("     Stemming (avec gestion négations et émotions)...")
+        print("     Stemming ...")
         df_processed = df.copy()
         df_processed['text_stemmed'] = cleaner.preprocess_with_techniques(
             df['text'].tolist(), technique='stemming',
@@ -128,7 +128,7 @@ def main(technique, description, experiment_name, sample_size, handle_negations,
         print(f"     Stemming terminé en {stem_time:.1f}s - {len(df_processed):,} tweets valides")
 
         lemma_start = time.time()
-        print("     Lemmatization (avec gestion négations et émotions)...")
+        print("     Lemmatization ...")
         df_processed['text_lemmatized'] = cleaner.preprocess_with_techniques(
             df_processed['text'].tolist(), technique='lemmatization',
             handle_negations=handle_negations, handle_emotions=handle_emotions
@@ -231,6 +231,45 @@ def main(technique, description, experiment_name, sample_size, handle_negations,
                     mlflow.set_tag("description", description)
                 mlflow.set_tag("model_description", model_description)
 
+                # Générer et logger la courbe ROC
+                print("   Génération de la courbe ROC...")
+                if hasattr(model, 'predict_proba'):
+                    import matplotlib.pyplot as plt
+                    from sklearn.metrics import roc_curve
+                    import tempfile
+
+                    # Utiliser les mêmes données de test
+                    X_test_roc = df_processed.iloc[splits_data['test_idx']][text_column]
+                    y_test_roc = df_processed.iloc[splits_data['test_idx']]['sentiment']
+                    y_pred_proba_roc = model.predict_proba(X_test_roc)
+
+                    # Calculer la courbe ROC
+                    fpr, tpr, _ = roc_curve(y_test_roc, y_pred_proba_roc[:, 1])
+                    auc_score = metrics_extended.get('auc_score', 0)
+
+                    # Créer le graphique
+                    plt.figure(figsize=(8, 6))
+                    plt.plot(fpr, tpr, linewidth=2, label=f'{technique_name.capitalize()} (AUC = {auc_score:.3f})')
+                    plt.plot([0, 1], [0, 1], 'k--', label='Aléatoire')
+                    plt.xlim([0.0, 1.0])
+                    plt.ylim([0.0, 1.05])
+                    plt.xlabel('Taux de faux positifs')
+                    plt.ylabel('Taux de vrais positifs')
+                    plt.title(f'Courbe ROC - {technique_name.capitalize()}')
+                    plt.legend(loc="lower right")
+                    plt.grid(True)
+
+                    # Sauvegarder temporairement et logger dans MLflow
+                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+                        plt.savefig(tmp_file.name, dpi=150, bbox_inches='tight')
+                        plt.close()
+
+                        # Logger dans MLflow
+                        mlflow.log_artifact(tmp_file.name, "plots")
+
+                        # Nettoyer le fichier temporaire
+                        os.unlink(tmp_file.name)
+
             print(f"   Entraînement {technique_name} terminé!")
 
             # Évaluer pour la comparaison (utilise les mêmes splits)
@@ -252,6 +291,7 @@ def main(technique, description, experiment_name, sample_size, handle_negations,
                 model_name=f"simple_{technique_name}"
             )
 
+
             eval_time = time.time() - eval_start
             technique_total_time = time.time() - technique_start
 
@@ -264,6 +304,9 @@ def main(technique, description, experiment_name, sample_size, handle_negations,
             print(f"   RESULTATS {technique_name.upper()}:")
             print(f"   Accuracy: {eval_metrics['accuracy']:.4f}")
             print(f"   F1-Score: {eval_metrics['f1_score']:.4f}")
+            if 'auc_score' in eval_metrics:
+                print(f"   AUC-ROC: {eval_metrics['auc_score']:.4f}")
+            print(f"   Temps entraînement: {metrics['training_time']:.3f}s")
             print(f"   Temps évaluation: {eval_time:.1f}s")
             print(f"   Temps total technique: {technique_total_time:.1f}s")
 
@@ -278,14 +321,18 @@ def main(technique, description, experiment_name, sample_size, handle_negations,
             comparison_data = []
             for technique_name, results in techniques_results.items():
                 metrics = results['eval_metrics']
-                comparison_data.append({
+                row = {
                     'Technique': technique_name.capitalize(),
                     'Accuracy': metrics['accuracy'],
                     'F1-Score': metrics['f1_score'],
                     'Précision': metrics['precision'],
                     'Rappel': metrics['recall'],
                     'Temps (s)': results['training_time']
-                })
+                }
+                # Ajouter AUC si disponible
+                if 'auc_score' in metrics:
+                    row['AUC-ROC'] = metrics['auc_score']
+                comparison_data.append(row)
 
             df_comparison = pd.DataFrame(comparison_data)
             print("\n   COMPARAISON DES TECHNIQUES:")
@@ -299,6 +346,8 @@ def main(technique, description, experiment_name, sample_size, handle_negations,
             print(f"\n   MEILLEURE TECHNIQUE: {best_technique.upper()}")
             print(f"   - F1-Score: {best_results['eval_metrics']['f1_score']:.4f}")
             print(f"   - Accuracy: {best_results['eval_metrics']['accuracy']:.4f}")
+            if 'auc_score' in best_results['eval_metrics']:
+                print(f"   - AUC-ROC: {best_results['eval_metrics']['auc_score']:.4f}")
         else:
             # Une seule technique
             technique_name = list(techniques_results.keys())[0]
@@ -367,10 +416,15 @@ Ce modèle sert de référence (baseline) pour comparer les modèles plus comple
                 'techniques_tested': len(techniques_results)
             })
 
-            mlflow.log_metrics({
+            summary_metrics = {
                 'best_accuracy': best_results['eval_metrics']['accuracy'],
                 'best_f1_score': best_results['eval_metrics']['f1_score']
-            })
+            }
+            # Ajouter AUC si disponible
+            if 'auc_score' in best_results['eval_metrics']:
+                summary_metrics['best_auc_score'] = best_results['eval_metrics']['auc_score']
+
+            mlflow.log_metrics(summary_metrics)
 
             mlflow.log_artifact(report_path, "reports")
 
