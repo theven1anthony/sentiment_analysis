@@ -217,24 +217,27 @@ class TextCleaner:
 
         return ' '.join(tokens)
 
-    def preprocess_with_techniques(self, texts: List[str], technique: str = 'lemmatization') -> List[str]:
+    def preprocess_with_techniques(self, texts: List[str], technique: str = 'lemmatization',
+                                  handle_negations: bool = True, handle_emotions: bool = True) -> List[str]:
         """
         Applique différentes techniques de prétraitement optimisées pour le sentiment.
 
         Args:
             texts: Liste des textes à traiter
             technique: 'stemming', 'lemmatization', ou 'basic'
+            handle_negations: Activer la gestion intelligente des négations
+            handle_emotions: Activer la préservation des émoticons
 
         Returns:
             Textes prétraités selon la technique choisie
         """
         if technique == 'stemming':
             return [self.advanced_preprocess(text, use_stemming=True, use_lemmatization=False,
-                                           handle_negations=True, handle_emotions=True)
+                                           handle_negations=handle_negations, handle_emotions=handle_emotions)
                    for text in texts]
         elif technique == 'lemmatization':
             return [self.advanced_preprocess(text, use_stemming=False, use_lemmatization=True,
-                                           handle_negations=True, handle_emotions=True)
+                                           handle_negations=handle_negations, handle_emotions=handle_emotions)
                    for text in texts]
         else:  # basic
             return [self.clean_tweet(text) for text in texts]

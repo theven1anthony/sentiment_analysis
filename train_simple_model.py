@@ -65,7 +65,15 @@ def create_training_function(technique_name, text_column, df_processed, splits_d
               type=int,
               default=None,
               help='Taille de l\'échantillon (None = dataset complet)')
-def main(technique, description, experiment_name, sample_size):
+@click.option('--handle-negations',
+              type=bool,
+              default=True,
+              help='Activer la gestion intelligente des négations')
+@click.option('--handle-emotions',
+              type=bool,
+              default=True,
+              help='Activer la préservation des émoticons')
+def main(technique, description, experiment_name, sample_size, handle_negations, handle_emotions):
     """Fonction principale pour entraîner et évaluer le modèle simple."""
 
     print("=== ENTRAÎNEMENT DU MODÈLE SIMPLE DE SENTIMENT ANALYSIS ===\n")
@@ -105,12 +113,14 @@ def main(technique, description, experiment_name, sample_size):
         cleaner = TextCleaner()
 
         print("   Application des techniques de prétraitement avancées:")
+        print(f"   Options: handle_negations={handle_negations}, handle_emotions={handle_emotions}")
 
         stem_start = time.time()
         print("     Stemming (avec gestion négations et émotions)...")
         df_processed = df.copy()
         df_processed['text_stemmed'] = cleaner.preprocess_with_techniques(
-            df['text'].tolist(), technique='stemming'
+            df['text'].tolist(), technique='stemming',
+            handle_negations=handle_negations, handle_emotions=handle_emotions
         )
         # Filtrage des tweets vides après preprocessing
         df_processed = df_processed[df_processed['text_stemmed'].str.len() > 0].reset_index(drop=True)
@@ -120,7 +130,8 @@ def main(technique, description, experiment_name, sample_size):
         lemma_start = time.time()
         print("     Lemmatization (avec gestion négations et émotions)...")
         df_processed['text_lemmatized'] = cleaner.preprocess_with_techniques(
-            df_processed['text'].tolist(), technique='lemmatization'
+            df_processed['text'].tolist(), technique='lemmatization',
+            handle_negations=handle_negations, handle_emotions=handle_emotions
         )
         # Filtrage des tweets vides après preprocessing
         df_processed = df_processed[df_processed['text_lemmatized'].str.len() > 0].reset_index(drop=True)
@@ -200,7 +211,11 @@ def main(technique, description, experiment_name, sample_size):
                 model, metrics, artifacts = train_func()
 
                 # Paramètres (hyperparamètres)
-                mlflow.log_params({"technique": technique_name})
+                mlflow.log_params({
+                    "technique": technique_name,
+                    "handle_negations": handle_negations,
+                    "handle_emotions": handle_emotions
+                })
 
                 # Métriques (performances + statistiques)
                 metrics_extended = metrics.copy()
