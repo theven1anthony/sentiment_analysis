@@ -1,0 +1,60 @@
+# Environnement virtuel Python
+venv/
+env/
+ENV/
+.venv/
+
+# Fichiers Python compilés
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution et packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Tests et coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Système
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Données volumineuses (à adapter selon vos besoins)
+*.csv
+*.parquet
+*.h5
+*.hdf5
+
+# Logs
+*.log
+
+# Documentation
+*.md
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Autres
+.env
+.env.*
+*.bak

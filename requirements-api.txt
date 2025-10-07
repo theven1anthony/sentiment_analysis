@@ -1,0 +1,25 @@
+# Requirements minimaux pour l'API FastAPI en production
+# Compatible Python 3.12
+
+# API Framework
+fastapi>=0.118.0
+uvicorn>=0.23.0
+
+# Machine Learning Core (léger)
+numpy>=1.26.0
+scikit-learn>=1.3.0
+
+# Deep Learning pour inférence uniquement
+tensorflow==2.20.0
+transformers>=4.41.0
+
+# Text Processing minimal
+nltk>=3.9.0
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.32.0
+pydantic>=2.0.0
+
+# Monitoring AWS
+boto3>=1.35.0

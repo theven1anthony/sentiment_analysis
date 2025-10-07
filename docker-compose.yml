@@ -1,0 +1,39 @@
+services:
+  # Service d'entraînement des modèles
+  training:
+    build: .
+    container_name: sentiment_training
+    volumes:
+      # Montage du code source pour le développement
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./mlruns:/app/mlruns
+      - ./reports:/app/reports
+      # Scripts d'entraînement
+      - ./train_simple_model.py:/app/train_simple_model.py
+      - ./train_word2vec_model.py:/app/train_word2vec_model.py
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
+    command: python train_advanced_model.py
+    depends_on:
+      - mlflow
+    networks:
+      - sentiment_net
+
+  # Service MLflow pour le tracking
+  mlflow:
+    build: .
+    container_name: sentiment_mlflow
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./mlruns:/app/mlruns
+      - ./models:/app/models
+    command: mlflow ui --host 0.0.0.0 --port 5001
+    networks:
+      - sentiment_net
+
+networks:
+  sentiment_net:
+    driver: bridge
