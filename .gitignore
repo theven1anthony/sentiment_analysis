@@ -41,7 +41,7 @@ wheels/
 .env.*.local
 
 # MLflow
-/mlruns/
+/mlruns_backup_20251007_061200/
 /mlartifacts/
 
 # Modèles entraînés
@@ -85,8 +85,9 @@ coverage.xml
 # AWS credentials
 .aws/
 aws-credentials.json
-/mlruns_backup_20250926_060323/
+/mlruns_backup_*/
 /reports/
 /models/archived/
 /models/production/
 /models/staging/
+/mlruns/

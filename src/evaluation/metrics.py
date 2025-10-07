@@ -55,8 +55,11 @@ class ModelEvaluator:
         # Ajout de l'AUC si les probabilités sont disponibles
         if y_pred_proba is not None:
             if y_pred_proba.ndim > 1:
-                # Prendre les probabilités de la classe positive
-                y_pred_proba = y_pred_proba[:, 1]
+                # Prendre les probabilités de la classe positive (colonne 1 si disponible, sinon 0)
+                if y_pred_proba.shape[1] > 1:
+                    y_pred_proba = y_pred_proba[:, 1]
+                else:
+                    y_pred_proba = y_pred_proba[:, 0]
             metrics['auc_score'] = roc_auc_score(y_true, y_pred_proba)
 
         # Ajout du temps d'entraînement si disponible
@@ -321,3 +324,75 @@ def create_data_splits(df: pd.DataFrame, test_size: float = 0.2,
     )
 
     return X_train, X_val, X_test, y_train, y_val, y_test
+
+
+def log_training_history(history: Dict[str, list], model_name: str = "model") -> None:
+    """
+    Log les métriques d'entraînement Keras dans MLflow avec graphiques.
+
+    Args:
+        history: Dictionnaire history.history de Keras
+        model_name: Nom du modèle pour les graphiques
+    """
+    import mlflow
+    import tempfile
+    import os
+
+    # 1. Logger les métriques epoch par epoch
+    for epoch in range(len(history['loss'])):
+        metrics_to_log = {}
+
+        for metric_name, values in history.items():
+            if epoch < len(values):
+                # Renommer pour MLflow : 'loss' -> 'train_loss', 'val_loss' -> 'val_loss'
+                if metric_name.startswith('val_'):
+                    mlflow_name = metric_name  # Déjà préfixé 'val_'
+                else:
+                    mlflow_name = f'train_{metric_name}'
+
+                mlflow.log_metric(mlflow_name, values[epoch], step=epoch)
+
+    # 2. Créer les graphiques train vs val
+    metrics_pairs = []
+
+    # Identifier les paires train/val
+    train_metrics = [k for k in history.keys() if not k.startswith('val_')]
+
+    for train_metric in train_metrics:
+        val_metric = f'val_{train_metric}'
+        if val_metric in history:
+            metrics_pairs.append((train_metric, val_metric))
+
+    # Créer les graphiques
+    if metrics_pairs:
+        n_plots = len(metrics_pairs)
+        fig, axes = plt.subplots(1, n_plots, figsize=(6*n_plots, 5))
+
+        if n_plots == 1:
+            axes = [axes]
+
+        for idx, (train_metric, val_metric) in enumerate(metrics_pairs):
+            ax = axes[idx]
+
+            epochs = range(1, len(history[train_metric]) + 1)
+
+            ax.plot(epochs, history[train_metric], 'b-', label=f'Train', linewidth=2)
+            ax.plot(epochs, history[val_metric], 'r-', label=f'Validation', linewidth=2)
+
+            # Titre formaté
+            metric_title = train_metric.replace('_', ' ').title()
+            ax.set_title(f'{metric_title} - {model_name}')
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel(metric_title)
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+
+        # Sauvegarder et logger dans MLflow
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+            plt.savefig(tmp_file.name, dpi=150, bbox_inches='tight')
+            plt.close()
+
+            mlflow.log_artifact(tmp_file.name, "training_curves")
+            os.unlink(tmp_file.name)
