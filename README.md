@@ -506,6 +506,103 @@ docker run -p 8000:8000 sentiment-api
 
 ---
 
+### 📊 Modèles USE - Benchmark sur 50 000 Tweets
+
+**Expérimentation** : `use_models_50000_v1` - Universal Sentence Encoder + Dense
+**Dataset** : 49 827 tweets Sentiment140 (après nettoyage)
+**Algorithme** : USE pré-entraîné (512 dim, sentence-level) + Dense
+**Date** : Octobre 2025
+
+#### 🏆 Résultat (Stemming uniquement)
+
+**Configuration testée** : USE + Stemming + Dense
+
+| Métrique | Valeur |
+|----------|--------|
+| **F1-Score** | **0.7421** |
+| **Accuracy** | **0.7423** |
+| **AUC-ROC** | **0.8218** |
+| **Précision** | 0.7432 |
+| **Rappel** | 0.7423 |
+| **Epochs entraînés** | 8/30 (early stopping) |
+| **Temps d'entraînement** | 77.4s |
+
+⚠️ **Note** : Expérience incomplète, seule la technique stemming a été testée (lemmatization manquante).
+
+#### 📈 Comparaison avec tous les modèles
+
+**Classement général (F1-Score) :**
+
+| Rang | Modèle | F1-Score | AUC-ROC | Temps | Δ vs Baseline |
+|------|--------|----------|---------|-------|---------------|
+| 1️⃣ | **Simple (Logistic + TF-IDF)** | **0.7754** | **0.8569** | **0.49s** | - |
+| 2️⃣ | Word2Vec + LSTM | 0.7657 | 0.8463 | 659.8s | -1.0% |
+| 3️⃣ | FastText + LSTM | 0.7628 | 0.8454 | 659.0s | -1.3% |
+| 4️⃣ | Word2Vec + Dense | 0.7571 | 0.8364 | 19.1s | -1.8% |
+| 5️⃣ | FastText + Dense | 0.7551 | 0.8337 | 29.1s | -2.0% |
+| 6️⃣ | **USE + Dense** | **0.7421** | **0.8218** | **77.4s** | **-3.3%** |
+
+#### 💡 Observations Clés
+
+1. **USE sous-performe TOUS les autres modèles** : F1=0.7421 (pire résultat du benchmark)
+2. **-3.3% en dessous du baseline simple** : 33 points de moins que TF-IDF
+3. **Early stopping très précoce** : Arrêt à 8 epochs (vs 12-19 pour Word2Vec/FastText)
+4. **Temps d'entraînement élevé** : 77s pour chargement USE + entraînement (158x plus lent que baseline)
+5. **AUC-ROC la plus faible** : 0.8218 (vs 0.8569 pour baseline, -35 points)
+
+#### 🔍 Analyse : Pourquoi USE sous-performe ?
+
+**Hypothèses expliquant les mauvaises performances :**
+
+1. **USE optimisé pour similarité sémantique** :
+   - Conçu pour mesurer la similarité entre phrases, pas pour classification de sentiment
+   - Perd les mots-clés discriminants forts ("love", "hate") dans l'encodage global
+
+2. **Tweets trop courts pour USE** :
+   - USE excelle sur phrases longues avec contexte riche (20-30 mots)
+   - Tweets : 10-15 mots en moyenne → contexte insuffisant
+   - TF-IDF capture mieux les mots-clés dans textes courts
+
+3. **Architecture trop simple** :
+   - Une seule couche Dense au-dessus de USE (512 → 1)
+   - Pas assez de capacité pour adapter les embeddings à la tâche
+
+4. **Early stopping trop précoce** :
+   - Arrêt à 8 epochs (sous-entraînement possible)
+   - Modèle n'a pas eu le temps de converger correctement
+
+5. **Embeddings figés** :
+   - USE pré-entraîné non fine-tuné sur sentiment
+   - Encodage générique pas adapté à la tâche spécifique
+
+#### 🎯 Enseignements et Recommandations
+
+**Ce que ce benchmark démontre :**
+- ✅ **TF-IDF reste champion** : Simplicité et efficacité battent la complexité
+- ✅ **Transfer learning ≠ garantie de succès** : Embeddings pré-entraînés pas toujours meilleurs
+- ✅ **Textes courts = mots-clés > contexte** : USE perd face à approches lexicales
+- ❌ **USE inadapté pour tweets** : Conçu pour phrases longues et riches en contexte
+
+**Recommandations :**
+- ❌ **Ne pas utiliser USE pour sentiment Twitter** : Sous-performe même les embeddings from scratch
+- ✅ **Conserver TF-IDF comme baseline production** : Meilleur rapport performance/complexité
+- 🔬 **Tester BERT fine-tuné** : Dernière chance pour les embeddings pré-entraînés
+  - BERT peut être fine-tuné (contrairement à USE figé)
+  - BERT-base conçu pour classification (USE pour similarité)
+
+**Prochaine étape** :
+- **BERT fine-tuning** : Entraîner les dernières couches sur sentiment Twitter
+- Si BERT < TF-IDF → **Utiliser TF-IDF en production** (plus simple, plus rapide, meilleur)
+
+#### 📁 Rapports Complets
+
+- Rapport détaillé : `reports/mlflow_report_use_models_50000_v1_*.txt`
+- Données brutes : `reports/mlflow_data_use_models_50000_v1_*.csv`
+- Courbes d'entraînement : Disponibles dans MLflow artifacts (training_curves/)
+- MLflow UI : http://localhost:5001 (expérience: `use_models_50000_v1`)
+
+---
+
 ### Surveillance en production
 - **Seuil d'alerte** : 3 prédictions incorrectes en 5 minutes
 - **Monitoring** : AWS CloudWatch
