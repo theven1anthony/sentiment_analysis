@@ -420,6 +420,92 @@ docker run -p 8000:8000 sentiment-api
 
 ---
 
+### 📊 Modèles FastText - Benchmark sur 50 000 Tweets
+
+**Expérimentation** : `fasttext_models_50000_v1` - FastText + Réseaux de neurones
+**Dataset** : 49 827 tweets Sentiment140 (après nettoyage)
+**Algorithme** : FastText (Skip-gram, 100 dim, n-grammes 3-6) + Dense/LSTM
+**Date** : Octobre 2025
+
+#### 🏆 Meilleur Modèle
+
+**Configuration gagnante** : FastText + Stemming + LSTM
+
+| Métrique | Valeur |
+|----------|--------|
+| **F1-Score** | **0.7628** |
+| **Accuracy** | **0.7631** |
+| **AUC-ROC** | **0.8454** |
+| **Précision** | 0.7641 |
+| **Rappel** | 0.7631 |
+| **Epochs entraînés** | 12/30 (early stopping) |
+| **Vocabulaire** | 9 970 mots |
+| **Temps d'entraînement** | 659.0s (~11 min) |
+
+#### 📈 Comparaison FastText vs Word2Vec
+
+**Architecture Dense (Embeddings moyennés) :**
+
+| Embedding | F1-Score | AUC-ROC | Temps | Epochs | Δ (FT - W2V) |
+|-----------|----------|---------|-------|--------|--------------|
+| **FastText** | 0.7551 | 0.8337 | 29.1s | 28 | **+0.10%** |
+| Word2Vec | 0.7541 | 0.8340 | 18.7s | 19 | - |
+
+**Architecture LSTM (Séquences de vecteurs) :**
+
+| Embedding | F1-Score | AUC-ROC | Temps | Epochs | Δ (FT - W2V) |
+|-----------|----------|---------|-------|--------|--------------|
+| **Word2Vec** | **0.7657** | **0.8463** | 659.8s | 12 | - |
+| FastText | 0.7628 | 0.8454 | 659.0s | 12 | **-0.29%** |
+
+#### 💡 Observations Clés
+
+1. **Word2Vec légèrement meilleur sur LSTM** : +0.29% F1 (meilleur modèle global)
+2. **FastText légèrement meilleur sur Dense** : +0.10% F1, mais 55% plus lent (calcul n-grammes)
+3. **LSTM > Dense** : +0.8% F1 pour FastText (vs +0.9% pour Word2Vec)
+4. **Avantage théorique FastText non confirmé** : Gestion OOV via n-grammes n'améliore pas les performances
+5. **Hypothèse** : Dataset Sentiment140 bien formé, peu de typos ou mots hors vocabulaire
+6. **Early stopping efficace** : Arrêt à 12 epochs au lieu de 30 pour LSTM
+
+#### 📊 Comparaison avec Modèle Simple
+
+| Modèle | F1-Score | AUC-ROC | Temps | Ratio Perf/Temps |
+|--------|----------|---------|-------|------------------|
+| **Simple (Logistic + TF-IDF)** | **0.7754** | **0.8569** | **0.49s** | **1.58 F1/s** |
+| Word2Vec + LSTM | 0.7657 | 0.8463 | 659.8s | 0.001 F1/s |
+| **FastText + LSTM** | 0.7628 | 0.8454 | 659.0s | 0.001 F1/s |
+| FastText + Dense | 0.7551 | 0.8337 | 29.1s | 0.026 F1/s |
+
+**Écart de performance** :
+- Simple vs FastText+LSTM : **+1.3% F1, +1.2% AUC** (1345x plus rapide)
+- Simple vs FastText+Dense : **+2.0% F1, +2.3% AUC** (59x plus rapide)
+
+#### 🎯 Analyse et Recommandations
+
+**Pourquoi TF-IDF surpasse Word2Vec/FastText ?**
+1. **Corpus trop petit** : 50k tweets insuffisants pour entraîner des embeddings de qualité (besoin de millions)
+2. **Tweets = textes courts** : Sentiment porté par mots-clés forts → TF-IDF capture parfaitement
+3. **Word2Vec/FastText from scratch** : Embeddings sous-optimaux sans transfer learning
+4. **Ratio paramètres/données** : Modèles neuronaux (50-500k paramètres) sur 50k samples → risque overfitting
+
+**Pour ce projet** :
+- ❌ **Ne pas utiliser FastText seul** : Pas d'amélioration vs Word2Vec, sous-performe le baseline
+- ✅ **Tester embeddings pré-entraînés** : USE ou BERT pour transfer learning
+- 📚 **Résultat cohérent avec la littérature** : TF-IDF bat embeddings from scratch sur petits corpus
+
+**Prochaines étapes** :
+1. **Universal Sentence Encoder (USE)** : Embeddings pré-entraînés sentence-level (attendu : ~78-80% F1)
+2. **BERT fine-tuné** : Transfer learning sur transformer (meilleure performance attendue)
+
+#### 📁 Rapports Complets
+
+- Rapport détaillé : `reports/mlflow_report_fasttext_models_50000_v1_*.txt`
+- Données brutes : `reports/mlflow_data_fasttext_models_50000_v1_*.csv`
+- Courbes d'entraînement : Disponibles dans MLflow artifacts (training_curves/)
+- MLflow UI : http://localhost:5001 (expérience: `fasttext_models_50000_v1`)
+
+---
+
 ### Surveillance en production
 - **Seuil d'alerte** : 3 prédictions incorrectes en 5 minutes
 - **Monitoring** : AWS CloudWatch

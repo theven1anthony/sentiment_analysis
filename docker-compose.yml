@@ -13,6 +13,7 @@ services:
       # Scripts d'entraînement
       - ./train_simple_model.py:/app/train_simple_model.py
       - ./train_word2vec_model.py:/app/train_word2vec_model.py
+      - ./train_fasttext_model.py:/app/train_fasttext_model.py
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5001
     command: python train_advanced_model.py
