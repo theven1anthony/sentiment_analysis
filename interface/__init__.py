@@ -1,0 +1,1 @@
+"""Interface Streamlit pour l'analyse de sentiment."""

@@ -1,15 +1,16 @@
 import tensorflow as tf
 
 
-def build_neural_network(input_dim: tuple[int, int], with_lstm: bool = False, lstm_units: int = 128, learning_rate: float = 0.001):
+def build_neural_network(input_dim: tuple[int, int], with_lstm: bool = False, lstm_units: int = 128,
+                         dropout: float = 0.4, recurrent_dropout: float = 0.3, learning_rate: float = 0.001):
     if with_lstm:
         # Architecture avec Bidirectional LSTM sur séquences
         model = tf.keras.Sequential([
             tf.keras.layers.Masking(mask_value=0.0, input_shape=(input_dim[0], input_dim[1])),
-            tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(lstm_units)),
-            tf.keras.layers.Dropout(0.4),
+            tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(lstm_units, recurrent_dropout=recurrent_dropout)),
+            tf.keras.layers.Dropout(dropout),
             tf.keras.layers.Dense(128, activation='relu'),
-            tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.Dropout(dropout * 0.75),  # Dropout légèrement réduit pour couche finale
             tf.keras.layers.Dense(1, activation='sigmoid')
         ])
     else:
@@ -17,9 +18,9 @@ def build_neural_network(input_dim: tuple[int, int], with_lstm: bool = False, ls
         embedding_dim = input_dim[1]
         model = tf.keras.Sequential([
             tf.keras.layers.Dense(256, activation='relu', input_shape=(embedding_dim,)),
-            tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.Dropout(dropout * 0.75),
             tf.keras.layers.Dense(128, activation='relu'),
-            tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.Dropout(dropout * 0.75),
             tf.keras.layers.Dense(1, activation='sigmoid')
         ])
 

@@ -49,10 +49,17 @@ data/
 ```
 
 ### 2. MLflow
-Démarrez le serveur de tracking MLflow :
+
+**Sans Docker :**
 ```bash
 mlflow ui --host 0.0.0.0 --port 5001
 ```
+
+**Avec Docker :**
+```bash
+docker-compose up mlflow
+```
+
 Interface accessible sur : http://localhost:5001
 
 ## Données
@@ -87,67 +94,92 @@ Le projet utilise le dataset **Sentiment140** contenant 1,6M de tweets étiquet�
 
 #### Modèle Simple (Baseline)
 
-**Entraîner avec une technique spécifique :**
+**Sans Docker :**
 ```bash
 # Avec stemming
 python train_simple_model.py --technique=stemming --description="Baseline stemming production"
 
 # Avec lemmatization
 python train_simple_model.py --technique=lemmatization --description="Baseline lemmatization"
-```
 
-**Comparer les techniques :**
-```bash
-# Comparaison complète stemming vs lemmatization
+# Comparaison complète
 python train_simple_model.py --technique=both --description="Comparaison techniques preprocessing"
 ```
 
-**Options avancées :**
+**Avec Docker :**
 ```bash
-# Avec échantillon réduit pour test rapide
-python train_simple_model.py \
-    --technique=lemmatization \
-    --sample-size=50000 \
-    --description="Test rapide lemmatization" \
-    --experiment-name="tests_rapides"
+# Entraînement simple
+docker-compose run training python train_simple_model.py --technique=stemming
 
-# Dataset complet (par défaut)
-python train_simple_model.py --technique=both --description="Entraînement production"
+# Comparaison complète
+docker-compose run training python train_simple_model.py --technique=both --description="Comparaison Docker"
 ```
 
 #### Modèles Avancés (TensorFlow/Keras + Embeddings)
 
-**Word2Vec avec réseaux de neurones :**
+**Sans Docker :**
 ```bash
-# Word2Vec avec architecture Dense (embeddings moyennés)
+# Word2Vec avec architecture Dense
 python train_word2vec_model.py --technique=stemming --sample-size=50000
 
-# Word2Vec avec architecture LSTM (séquences)
-python train_word2vec_model.py --technique=lemmatization --with-lstm --sample-size=50000
+# Word2Vec avec LSTM
+python train_word2vec_model.py --technique=stemming --with-lstm --sample-size=50000
 
-# Comparaison stemming vs lemmatization
-python train_word2vec_model.py --technique=both --sample-size=50000 --description="Benchmark Word2Vec"
-
-# Configuration avancée
-python train_word2vec_model.py \
-    --technique=stemming \
-    --with-lstm \
-    --vector-size=200 \
-    --sample-size=100000 \
-    --description="Production Word2Vec LSTM"
-```
-
-**Autres embeddings (à venir) :**
-```bash
-# FastText avec architecture LSTM
+# FastText avec LSTM
 python train_fasttext_model.py --technique=lemmatization --with-lstm
 
-# Universal Sentence Encoder (USE)
+# GloVe Twitter pré-entraîné (recommandé pour tweets)
+python train_glove_model.py --technique=stemming --vector-size=200
+python train_glove_model.py --technique=stemming --with-lstm --vector-size=200
+
+# Universal Sentence Encoder
 python train_use_model.py --technique=stemming
 
-# BERT (fine-tuning)
+# BERT fine-tuning
 python train_bert_model.py --technique=stemming --epochs=3
 ```
+
+**Avec Docker :**
+```bash
+# Word2Vec
+docker-compose run training python train_word2vec_model.py --technique=stemming
+
+# FastText
+docker-compose run training python train_fasttext_model.py --technique=stemming --with-lstm
+
+# GloVe Twitter (nécessite téléchargement préalable)
+docker-compose run training python train_glove_model.py --technique=stemming --vector-size=200
+
+# BERT
+docker-compose run training python train_bert_model.py --technique=stemming --epochs=3
+```
+
+#### Optimisation d'hyperparamètres
+
+**Prérequis:** Augmenter la RAM Docker à 14 GB (Settings → Resources → Memory)
+
+**Sans Docker :**
+```bash
+# Optimisation Random Search (20 runs, ~13h)
+python optimize_hyperparameters.py --n-runs=20 --sample-size=200000
+```
+
+**Avec Docker :**
+```bash
+# Optimisation Random Search
+docker-compose run training python optimize_hyperparameters.py --n-runs=20 --sample-size=200000
+```
+
+**Hyperparamètres optimisés:**
+- `vector_size`: [100, 110, 120]
+- `lstm_units`: [128, 144]
+- `window`: [5, 7]
+- `min_count`: [1, 2]
+- `dropout`: [0.3, 0.4]
+- `recurrent_dropout`: [0.2, 0.3]
+- `learning_rate`: [0.0005, 0.001]
+
+**Résultats:** Rapport CSV généré dans `reports/hyperopt_*.csv`
 
 ### Interface MLflow
 
@@ -168,16 +200,97 @@ python train_bert_model.py --technique=stemming --epochs=3
    - `algorithm` : logistic_regression, lstm, bert
    - `description` : Description personnalisée
 
-### API de prédiction
+### Déploiement en production
 
-#### Démarrer l'API locale
+#### Étape 1 : Enregistrer le modèle dans Model Registry
+
+**Via MLflow UI (http://localhost:5001):**
+
+1. Accéder à l'expérimentation (ex: `hyperparameter_optimization` ou `word2vec_models_200000_v1`)
+2. Filtrer par tag `best_model = true` (si optimisation) ou trier par F1-Score
+3. Cliquer sur le run du meilleur modèle
+4. Onglet **Artifacts** → **model** → Bouton **Register Model**
+5. Créer un nouveau modèle ou sélectionner un existant:
+   - Nom: `w2v_200K_model` (ou `w2v_optimized_model`)
+   - Cliquer sur **Register**
+
+**Résultat:** Le modèle est enregistré avec `version=1` (ou version suivante si existant)
+
+#### Étape 2 : Déployer le modèle
+
 ```bash
+# Déployer depuis Model Registry vers production
+python deploy_best_model.py --name w2v_200K_model --version 1
+
+# Exemple avec modèle optimisé
+python deploy_best_model.py --name w2v_optimized_model --version 1
+```
+
+**Ce script:**
+- Charge le modèle pyfunc depuis MLflow Model Registry
+- Sauvegarde l'URI dans `models/production/model_uri.txt`
+- Crée les métadonnées dans `models/production/metadata.pkl`
+
+#### Étape 3 : Démarrer l'API
+
+**Configuration du chargement du modèle**
+
+L'API supporte deux modes de chargement :
+
+**Mode 1 : Variables d'environnement (recommandé pour production AWS)**
+```bash
+# Créer un fichier .env (copier depuis .env.example)
+cp .env.example .env
+
+# Éditer le fichier .env avec votre configuration
+MODEL_NAME=w2v_200K_model
+MODEL_STAGE=Production  # ou MODEL_VERSION=1
+
+# Variables optionnelles
+MLFLOW_TRACKING_URI=http://localhost:5001
+ALERT_WINDOW_MINUTES=5
+ALERT_THRESHOLD=3
+```
+
+**Mode 2 : Fichier local (développement)**
+```bash
+# Le script deploy_best_model.py crée automatiquement model_uri.txt
+python deploy_best_model.py --name w2v_200K_model --version 1
+```
+
+**Démarrer l'API**
+
+**Sans Docker :**
+```bash
+# Mode développement avec rechargement automatique
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+
+# Mode production
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+**Avec Docker :**
+```bash
+# Mode développement (avec auto-reload)
+docker-compose up api
+
+# En arrière-plan
+docker-compose up -d api
+```
+
+#### Documentation interactive
+```bash
+# Swagger UI (recommandé)
+http://localhost:8000/docs
+
+# ReDoc (alternative)
+http://localhost:8000/redoc
 ```
 
 #### Utiliser l'API
+
+**Endpoint /predict - Prédiction de sentiment**
 ```bash
-# Prédiction simple
 curl -X POST "http://localhost:8000/predict" \
      -H "Content-Type: application/json" \
      -d '{"text": "I love this product!"}'
@@ -186,14 +299,105 @@ curl -X POST "http://localhost:8000/predict" \
 {
   "sentiment": 1,
   "confidence": 0.87,
-  "text": "I love this product!"
+  "text": "I love this product!",
+  "prediction_id": "pred_a1b2c3d4",
+  "timestamp": "2025-10-07T13:30:00"
+}
+```
+
+**Endpoint /feedback - Enregistrer un feedback**
+```bash
+curl -X POST "http://localhost:8000/feedback" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "text": "I love this product!",
+       "predicted_sentiment": 0,
+       "actual_sentiment": 1,
+       "prediction_id": "pred_a1b2c3d4"
+     }'
+
+# Réponse
+{
+  "status": "feedback_recorded",
+  "message": "Merci pour votre retour",
+  "alert_triggered": false,
+  "misclassified_count": 1
+}
+```
+
+**Endpoint /health - Health check**
+```bash
+curl http://localhost:8000/health
+
+# Réponse
+{
+  "status": "healthy",
+  "model_loaded": true,
+  "model_type": "logistic_regression",
+  "timestamp": "2025-10-07T13:30:00"
+}
+```
+
+**Endpoint /model/info - Informations du modèle**
+```bash
+curl http://localhost:8000/model/info
+
+# Réponse
+{
+  "model_type": "logistic_regression",
+  "technique": "stemming",
+  "f1_score": 0.7754,
+  "accuracy": 0.7754,
+  "training_date": "2025-10-07"
 }
 ```
 
 #### Interface de test Streamlit
+
+L'interface Streamlit permet de tester l'API de manière interactive avec feedback en temps réel.
+
+**Prérequis :**
+1. API en cours d'exécution (voir section précédente)
+2. Modèle déployé dans `models/production/`
+
+**Démarrer l'interface :**
+
+**Sans Docker :**
 ```bash
+# Depuis la racine du projet
 streamlit run interface/app.py
 ```
+
+**Avec Docker :**
+```bash
+# Lancer Streamlit + API (recommandé)
+docker-compose up streamlit
+
+# Lancer tout le stack (Streamlit + API + MLflow)
+docker-compose up streamlit api mlflow
+
+# En arrière-plan
+docker-compose up -d streamlit
+```
+
+**Interface accessible sur :** http://localhost:8501
+
+**Fonctionnalités :**
+- ✅ Analyse de sentiment en temps réel
+- ✅ Affichage du niveau de confiance
+- ✅ Système de feedback pour corrections
+- ✅ Monitoring de l'API et du modèle
+- ✅ Alertes si 3 erreurs en 5 minutes
+
+**Utilisation :**
+1. Entrer un texte dans la zone de saisie
+2. Cliquer sur "Analyser le sentiment"
+3. Consulter les résultats (sentiment + confiance)
+4. Optionnel : Donner un feedback si la prédiction est incorrecte
+
+**Note Docker :** Lorsque vous utilisez Docker, l'URL de l'API est automatiquement configurée sur `http://api:8000` (communication inter-conteneurs).
+
+Documentation complète : `interface/README.md`
 
 ## Architecture
 
@@ -201,6 +405,11 @@ streamlit run interface/app.py
 ```
 sentiment_analysis/
 ├── api/                    # API FastAPI
+│   ├── main.py            # Endpoints de l'API
+│   └── models.py          # Modèles Pydantic
+├── interface/             # Interface Streamlit
+│   ├── app.py             # Application principale
+│   └── README.md          # Documentation interface
 ├── data/                   # Datasets
 ├── models/                 # Modèles entraînés
 │   ├── checkpoints/       # Checkpoints pour reprise d'entraînement
@@ -246,13 +455,31 @@ mypy src/ api/              # Vérification de types
 
 ### Déploiement local
 ```bash
-# API en mode production
+# API en mode production (sans Docker)
 uvicorn api.main:app --host 0.0.0.0 --port 8000
 
-# Avec Docker (à configurer)
-docker build -t sentiment-api .
-docker run -p 8000:8000 sentiment-api
+# Avec Docker Compose (recommandé)
+# Lancer uniquement l'API
+docker-compose up api
+
+# Lancer API + MLflow
+docker-compose up api mlflow
+
+# Lancer tous les services
+docker-compose up
+
+# En arrière-plan
+docker-compose up -d api
+
+# Arrêter les services
+docker-compose down
 ```
+
+**Services disponibles :**
+- API FastAPI : http://localhost:8000
+- MLflow UI : http://localhost:5001
+- Interface Streamlit : http://localhost:8501
+- Documentation API : http://localhost:8000/docs
 
 ### Déploiement cloud (AWS)
 ```bash
@@ -271,335 +498,70 @@ docker run -p 8000:8000 sentiment-api
 - **AUC-ROC** : Capacité de discrimination
 - **Temps d'entraînement** : Performance opérationnelle
 
-## Résultats des Expérimentations
-
-### 📊 Modèles Simples - Benchmark sur 50 000 Tweets
-
-**Expérimentation** : `simple_models_50000_v1` - Analyse comparative Stemming vs Lemmatization
-**Dataset** : 50 000 tweets Sentiment140
-**Algorithme** : Logistic Regression + TF-IDF
-**Date** : Octobre 2025
-
-#### 🏆 Meilleur Modèle
-
-**Configuration gagnante** : Stemming + Négations=True + Émotions=True
-
-| Métrique | Valeur |
-|----------|--------|
-| **F1-Score** | **0.7754** |
-| **Accuracy** | **0.7754** |
-| **AUC-ROC** | **0.8569** |
-| **Précision** | 0.7754 |
-| **Rappel** | 0.7754 |
-| **Temps d'entraînement** | 0.49s |
-
-#### 📈 Comparaison Stemming vs Lemmatization
-
-| Configuration | Stemming | Lemmatization | Δ (Stemming - Lemma) |
-|---------------|----------|---------------|----------------------|
-| **Négations + Émotions** | **0.7754** (AUC: 0.8569) | 0.7722 (AUC: 0.8559) | **+0.0032** |
-| **Négations seules** | **0.7743** (AUC: 0.8577) | 0.7715 (AUC: 0.8554) | **+0.0028** |
-| **Émotions seules** | **0.7712** (AUC: 0.8534) | 0.7706 (AUC: 0.8528) | **+0.0006** |
-| **Sans gestion** | **0.7739** (AUC: 0.8534) | 0.7710 (AUC: 0.8517) | **+0.0029** |
-
-#### 📊 Statistiques Globales
-
-| Métrique | Valeur |
-|----------|--------|
-| **Accuracy moyenne** | 0.7725 |
-| **Écart-type (std)** | 0.0018 |
-| **F1-Score moyen** | 0.7725 |
-| **Écart-type (std)** | 0.0018 |
-
-#### 💡 Observations Clés
-
-1. **Stemming systématiquement meilleur** : Performance supérieure dans toutes les configurations (+0.28% à +0.32%)
-2. **Négations + Émotions = optimal** : Meilleure configuration avec F1=0.7754 et AUC=0.8569
-3. **Stabilité remarquable** : Écart-type très faible (0.0018) → résultats reproductibles
-4. **Temps d'entraînement** : Stemming (0.43-0.49s) ~15% plus rapide que lemmatization (0.49-0.60s)
-5. **AUC-ROC élevée** : 0.85+ sur tous les modèles → excellente capacité de discrimination
-
-#### 🎯 Recommandations
-
-- **Production** : Stemming + Négations=True + Émotions=True
-- **Justification** : Meilleur compromis performance/rapidité
-- **Gain vs baseline** : +0.32% vs lemmatization sur configuration équivalente
-- **Robustesse** : Variance minimale entre runs (std=0.0018)
-
-#### 📁 Rapports Complets
-
-- Rapport détaillé : `reports/mlflow_report_simple_models_50000_v1_*.txt`
-- Données brutes : `reports/mlflow_data_simple_models_50000_v1_*.csv`
-- MLflow UI : http://localhost:5001 (expérience: `simple_models_50000_v1`)
-
----
-
-### 📊 Modèles Word2Vec - Benchmark sur 50 000 Tweets
-
-**Expérimentation** : `word2vec_models_50000_v1` - Word2Vec + Réseaux de neurones
-**Dataset** : 49 827 tweets Sentiment140 (après nettoyage)
-**Algorithme** : Word2Vec (Skip-gram, 100 dim) + Dense/LSTM
-**Date** : Octobre 2025
-
-#### 🏆 Meilleur Modèle
-
-**Configuration gagnante** : Word2Vec + Stemming + LSTM
-
-| Métrique | Valeur |
-|----------|--------|
-| **F1-Score** | **0.7653** |
-| **Accuracy** | **0.7654** |
-| **AUC-ROC** | **0.8472** |
-| **Précision** | 0.7658 |
-| **Rappel** | 0.7654 |
-| **Epochs entraînés** | 13/30 (early stopping) |
-| **Vocabulaire** | 9 970 mots |
-| **Temps d'entraînement** | 701.8s (~11.7 min) |
-
-#### 📈 Comparaison Architectures
-
-**Dense (Embeddings moyennés) :**
-
-| Technique | F1-Score | AUC-ROC | Temps moyen | Epochs moyen |
-|-----------|----------|---------|-------------|--------------|
-| **Stemming** | **0.7571** (±0.0004) | **0.8364** | 19.1s | 19.7 |
-| **Lemmatization** | **0.7526** (±0.0009) | **0.8331** | 18.1s | 18.3 |
-| **Δ (Stem - Lemma)** | **+0.0045** | **+0.0033** | +1.0s | +1.4 |
-
-**LSTM (Séquences de vecteurs) :**
-
-| Technique | F1-Score | AUC-ROC | Temps | Epochs |
-|-----------|----------|---------|-------|--------|
-| **Stemming** | **0.7653** | **0.8472** | 701.8s | 13 |
-| **Lemmatization** | **0.7609** | **0.8435** | 643.7s | 12 |
-| **Δ (Stem - Lemma)** | **+0.0044** | **+0.0037** | +58.1s | +1 |
-
-#### 💡 Observations Clés
-
-1. **LSTM surpasse Dense** : +0.9% F1-Score, +1.1% AUC-ROC
-2. **Stemming systématiquement meilleur** : +0.45% (Dense) et +0.44% (LSTM) vs lemmatization
-3. **Trade-off performance/temps** : LSTM 38x plus lent que Dense pour +0.9% de gain
-4. **Vocabulaire plus compact** : Stemming (9 970 mots) vs Lemmatization (11 353 mots) = -12%
-5. **Early stopping efficace** : Arrêt à 12-13 epochs au lieu de 30 (gain de temps ×2.3)
-6. **Stabilité Dense remarquable** : Écart-type très faible (0.0004-0.0009) → résultats reproductibles
-
-#### 📊 Comparaison avec Modèle Simple
-
-| Modèle | F1-Score | AUC-ROC | Temps | Ratio Perf/Temps |
-|--------|----------|---------|-------|------------------|
-| **Simple (Logistic + TF-IDF)** | **0.7754** | **0.8569** | **0.49s** | **1.58 F1/s** |
-| **Word2Vec + Dense** | 0.7571 | 0.8364 | 19.1s | 0.040 F1/s |
-| **Word2Vec + LSTM** | 0.7653 | 0.8472 | 701.8s | 0.001 F1/s |
-
-**Écart de performance** :
-- Simple vs W2V+Dense : **+1.8% F1, +2.0% AUC** (39x plus rapide)
-- Simple vs W2V+LSTM : **+1.0% F1, +1.0% AUC** (1432x plus rapide)
-
-#### 🎯 Recommandations
-
-**Pour ce projet** :
-- ❌ **Ne pas utiliser Word2Vec seul** : Performance inférieure au modèle simple baseline
-- ✅ **Tester d'autres embeddings** : FastText, USE, BERT pour surpasser le baseline
-- ⚠️ **LSTM coût/bénéfice faible** : +0.9% pour 38x plus de temps vs Dense
-
-**Prochaines étapes** :
-1. **Universal Sentence Encoder (USE)** : Embeddings de documents pré-entraînés state-of-the-art
-2. **BERT fine-tuné** : Modèle transformer pour NLP (meilleure performance attendue)
-3. **FastText** : Gestion des mots hors vocabulaire et sous-mots
-
-**Si Word2Vec nécessaire** :
-- Configuration optimale : Stemming + LSTM (F1=0.7653)
-- Alternative rapide : Stemming + Dense (F1=0.7571, 19s)
-
-#### 📁 Rapports Complets
-
-- Rapport détaillé : `reports/mlflow_report_word2vec_models_50000_v1_*.txt`
-- Données brutes : `reports/mlflow_data_word2vec_models_50000_v1_*.csv`
-- Courbes d'entraînement : Disponibles dans MLflow artifacts (training_curves/)
-- MLflow UI : http://localhost:5001 (expérience: `word2vec_models_50000_v1`)
-
----
-
-### 📊 Modèles FastText - Benchmark sur 50 000 Tweets
-
-**Expérimentation** : `fasttext_models_50000_v1` - FastText + Réseaux de neurones
-**Dataset** : 49 827 tweets Sentiment140 (après nettoyage)
-**Algorithme** : FastText (Skip-gram, 100 dim, n-grammes 3-6) + Dense/LSTM
-**Date** : Octobre 2025
-
-#### 🏆 Meilleur Modèle
-
-**Configuration gagnante** : FastText + Stemming + LSTM
-
-| Métrique | Valeur |
-|----------|--------|
-| **F1-Score** | **0.7628** |
-| **Accuracy** | **0.7631** |
-| **AUC-ROC** | **0.8454** |
-| **Précision** | 0.7641 |
-| **Rappel** | 0.7631 |
-| **Epochs entraînés** | 12/30 (early stopping) |
-| **Vocabulaire** | 9 970 mots |
-| **Temps d'entraînement** | 659.0s (~11 min) |
-
-#### 📈 Comparaison FastText vs Word2Vec
-
-**Architecture Dense (Embeddings moyennés) :**
-
-| Embedding | F1-Score | AUC-ROC | Temps | Epochs | Δ (FT - W2V) |
-|-----------|----------|---------|-------|--------|--------------|
-| **FastText** | 0.7551 | 0.8337 | 29.1s | 28 | **+0.10%** |
-| Word2Vec | 0.7541 | 0.8340 | 18.7s | 19 | - |
-
-**Architecture LSTM (Séquences de vecteurs) :**
-
-| Embedding | F1-Score | AUC-ROC | Temps | Epochs | Δ (FT - W2V) |
-|-----------|----------|---------|-------|--------|--------------|
-| **Word2Vec** | **0.7657** | **0.8463** | 659.8s | 12 | - |
-| FastText | 0.7628 | 0.8454 | 659.0s | 12 | **-0.29%** |
-
-#### 💡 Observations Clés
-
-1. **Word2Vec légèrement meilleur sur LSTM** : +0.29% F1 (meilleur modèle global)
-2. **FastText légèrement meilleur sur Dense** : +0.10% F1, mais 55% plus lent (calcul n-grammes)
-3. **LSTM > Dense** : +0.8% F1 pour FastText (vs +0.9% pour Word2Vec)
-4. **Avantage théorique FastText non confirmé** : Gestion OOV via n-grammes n'améliore pas les performances
-5. **Hypothèse** : Dataset Sentiment140 bien formé, peu de typos ou mots hors vocabulaire
-6. **Early stopping efficace** : Arrêt à 12 epochs au lieu de 30 pour LSTM
-
-#### 📊 Comparaison avec Modèle Simple
-
-| Modèle | F1-Score | AUC-ROC | Temps | Ratio Perf/Temps |
-|--------|----------|---------|-------|------------------|
-| **Simple (Logistic + TF-IDF)** | **0.7754** | **0.8569** | **0.49s** | **1.58 F1/s** |
-| Word2Vec + LSTM | 0.7657 | 0.8463 | 659.8s | 0.001 F1/s |
-| **FastText + LSTM** | 0.7628 | 0.8454 | 659.0s | 0.001 F1/s |
-| FastText + Dense | 0.7551 | 0.8337 | 29.1s | 0.026 F1/s |
-
-**Écart de performance** :
-- Simple vs FastText+LSTM : **+1.3% F1, +1.2% AUC** (1345x plus rapide)
-- Simple vs FastText+Dense : **+2.0% F1, +2.3% AUC** (59x plus rapide)
-
-#### 🎯 Analyse et Recommandations
-
-**Pourquoi TF-IDF surpasse Word2Vec/FastText ?**
-1. **Corpus trop petit** : 50k tweets insuffisants pour entraîner des embeddings de qualité (besoin de millions)
-2. **Tweets = textes courts** : Sentiment porté par mots-clés forts → TF-IDF capture parfaitement
-3. **Word2Vec/FastText from scratch** : Embeddings sous-optimaux sans transfer learning
-4. **Ratio paramètres/données** : Modèles neuronaux (50-500k paramètres) sur 50k samples → risque overfitting
-
-**Pour ce projet** :
-- ❌ **Ne pas utiliser FastText seul** : Pas d'amélioration vs Word2Vec, sous-performe le baseline
-- ✅ **Tester embeddings pré-entraînés** : USE ou BERT pour transfer learning
-- 📚 **Résultat cohérent avec la littérature** : TF-IDF bat embeddings from scratch sur petits corpus
-
-**Prochaines étapes** :
-1. **Universal Sentence Encoder (USE)** : Embeddings pré-entraînés sentence-level (attendu : ~78-80% F1)
-2. **BERT fine-tuné** : Transfer learning sur transformer (meilleure performance attendue)
-
-#### 📁 Rapports Complets
-
-- Rapport détaillé : `reports/mlflow_report_fasttext_models_50000_v1_*.txt`
-- Données brutes : `reports/mlflow_data_fasttext_models_50000_v1_*.csv`
-- Courbes d'entraînement : Disponibles dans MLflow artifacts (training_curves/)
-- MLflow UI : http://localhost:5001 (expérience: `fasttext_models_50000_v1`)
-
----
-
-### 📊 Modèles USE - Benchmark sur 50 000 Tweets
-
-**Expérimentation** : `use_models_50000_v1` - Universal Sentence Encoder + Dense
-**Dataset** : 49 827 tweets Sentiment140 (après nettoyage)
-**Algorithme** : USE pré-entraîné (512 dim, sentence-level) + Dense
-**Date** : Octobre 2025
-
-#### 🏆 Résultat (Stemming uniquement)
-
-**Configuration testée** : USE + Stemming + Dense
-
-| Métrique | Valeur |
-|----------|--------|
-| **F1-Score** | **0.7421** |
-| **Accuracy** | **0.7423** |
-| **AUC-ROC** | **0.8218** |
-| **Précision** | 0.7432 |
-| **Rappel** | 0.7423 |
-| **Epochs entraînés** | 8/30 (early stopping) |
-| **Temps d'entraînement** | 77.4s |
-
-⚠️ **Note** : Expérience incomplète, seule la technique stemming a été testée (lemmatization manquante).
-
-#### 📈 Comparaison avec tous les modèles
-
-**Classement général (F1-Score) :**
-
-| Rang | Modèle | F1-Score | AUC-ROC | Temps | Δ vs Baseline |
-|------|--------|----------|---------|-------|---------------|
-| 1️⃣ | **Simple (Logistic + TF-IDF)** | **0.7754** | **0.8569** | **0.49s** | - |
-| 2️⃣ | Word2Vec + LSTM | 0.7657 | 0.8463 | 659.8s | -1.0% |
-| 3️⃣ | FastText + LSTM | 0.7628 | 0.8454 | 659.0s | -1.3% |
-| 4️⃣ | Word2Vec + Dense | 0.7571 | 0.8364 | 19.1s | -1.8% |
-| 5️⃣ | FastText + Dense | 0.7551 | 0.8337 | 29.1s | -2.0% |
-| 6️⃣ | **USE + Dense** | **0.7421** | **0.8218** | **77.4s** | **-3.3%** |
-
-#### 💡 Observations Clés
-
-1. **USE sous-performe TOUS les autres modèles** : F1=0.7421 (pire résultat du benchmark)
-2. **-3.3% en dessous du baseline simple** : 33 points de moins que TF-IDF
-3. **Early stopping très précoce** : Arrêt à 8 epochs (vs 12-19 pour Word2Vec/FastText)
-4. **Temps d'entraînement élevé** : 77s pour chargement USE + entraînement (158x plus lent que baseline)
-5. **AUC-ROC la plus faible** : 0.8218 (vs 0.8569 pour baseline, -35 points)
-
-#### 🔍 Analyse : Pourquoi USE sous-performe ?
-
-**Hypothèses expliquant les mauvaises performances :**
-
-1. **USE optimisé pour similarité sémantique** :
-   - Conçu pour mesurer la similarité entre phrases, pas pour classification de sentiment
-   - Perd les mots-clés discriminants forts ("love", "hate") dans l'encodage global
-
-2. **Tweets trop courts pour USE** :
-   - USE excelle sur phrases longues avec contexte riche (20-30 mots)
-   - Tweets : 10-15 mots en moyenne → contexte insuffisant
-   - TF-IDF capture mieux les mots-clés dans textes courts
-
-3. **Architecture trop simple** :
-   - Une seule couche Dense au-dessus de USE (512 → 1)
-   - Pas assez de capacité pour adapter les embeddings à la tâche
-
-4. **Early stopping trop précoce** :
-   - Arrêt à 8 epochs (sous-entraînement possible)
-   - Modèle n'a pas eu le temps de converger correctement
-
-5. **Embeddings figés** :
-   - USE pré-entraîné non fine-tuné sur sentiment
-   - Encodage générique pas adapté à la tâche spécifique
-
-#### 🎯 Enseignements et Recommandations
-
-**Ce que ce benchmark démontre :**
-- ✅ **TF-IDF reste champion** : Simplicité et efficacité battent la complexité
-- ✅ **Transfer learning ≠ garantie de succès** : Embeddings pré-entraînés pas toujours meilleurs
-- ✅ **Textes courts = mots-clés > contexte** : USE perd face à approches lexicales
-- ❌ **USE inadapté pour tweets** : Conçu pour phrases longues et riches en contexte
-
-**Recommandations :**
-- ❌ **Ne pas utiliser USE pour sentiment Twitter** : Sous-performe même les embeddings from scratch
-- ✅ **Conserver TF-IDF comme baseline production** : Meilleur rapport performance/complexité
-- 🔬 **Tester BERT fine-tuné** : Dernière chance pour les embeddings pré-entraînés
-  - BERT peut être fine-tuné (contrairement à USE figé)
-  - BERT-base conçu pour classification (USE pour similarité)
-
-**Prochaine étape** :
-- **BERT fine-tuning** : Entraîner les dernières couches sur sentiment Twitter
-- Si BERT < TF-IDF → **Utiliser TF-IDF en production** (plus simple, plus rapide, meilleur)
-
-#### 📁 Rapports Complets
-
-- Rapport détaillé : `reports/mlflow_report_use_models_50000_v1_*.txt`
-- Données brutes : `reports/mlflow_data_use_models_50000_v1_*.csv`
-- Courbes d'entraînement : Disponibles dans MLflow artifacts (training_curves/)
-- MLflow UI : http://localhost:5001 (expérience: `use_models_50000_v1`)
+## Résultats du Projet
+
+### Modèle de Production : Word2Vec LSTM 200k
+
+**Performance finale :**
+```
+F1-Score    : 0.7945
+Accuracy    : 0.7945
+AUC-ROC     : 0.8786
+Temps       : 38 min (entraînement)
+Latence     : < 50ms/tweet (inférence)
+```
+
+**Configuration :**
+- Architecture : Word2Vec (100 dim) + Bidirectional LSTM (128 units)
+- Prétraitement : Stemming
+- Dataset : 200 000 tweets Sentiment140
+- Entraînement : 10 epochs (early stopping)
+
+**Pourquoi ce modèle ?**
+- Surpasse BERT 50k (+0.7% F1) avec 6x moins de temps d'entraînement
+- Déployable sur CPU (pas de GPU requis)
+- Meilleure généralisation validée (gap train/val minimal : 0.073)
+- Compatible contraintes infrastructure AWS free-tier
+
+### Approches Testées
+
+| Modèle | F1-Score | Temps | Commentaire |
+|--------|----------|-------|-------------|
+| **Word2Vec LSTM 200k** | **0.7945** | 38 min | **Production** ✅ |
+| BERT 50k | 0.7892 | 3h48min | Trop coûteux |
+| Word2Vec LSTM 100k | 0.7846 | 19 min | Étape validation |
+| TF-IDF Baseline | 0.7754 | 0.49s | Excellent baseline |
+| Word2Vec LSTM 50k | 0.7653 | 12 min | Manque données |
+| FastText LSTM 50k | 0.7628 | 11 min | Pas d'avantage vs W2V |
+| USE 50k | 0.7421 | 77s | Inadapté tweets courts |
+
+### Méthodologie
+
+Le projet a suivi une approche incrémentale :
+
+1. **Phase 1 : Benchmark 50k tweets** (6 modèles testés)
+   - Identification baseline TF-IDF (F1=0.7754)
+   - Word2Vec LSTM meilleur compromis modèles neuronaux
+   - BERT champion mais trop coûteux
+
+2. **Phase 2 : Progression 50k → 100k → 200k**
+   - Diagnostic : Manque de diversité données sur 50k
+   - Validation : Amélioration continue (+2.5% puis +1.3% F1)
+   - Limite matérielle atteinte : 8.7GB/11.7GB RAM
+
+3. **Phase 3 : Modèle de production**
+   - Word2Vec LSTM 200k retenu
+   - Objectif initial (F1 > 75%) dépassé de +5.9%
+
+**📄 Documentation complète :**
+
+Retrouvez l'analyse technique détaillée, la méthodologie complète et tous les résultats d'expérimentations dans :
+
+→ **[blog_article.md](blog_article.md)** (Article technique complet)
+
+**📊 Rapports MLflow :**
+- Disponibles dans `reports/mlflow_report_*.txt`
+- Interface MLflow : http://localhost:5001
 
 ---
 

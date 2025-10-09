@@ -37,6 +37,7 @@ mypy>=1.8.0
 
 # Interface utilisateur (Python 3.12 compatible)
 streamlit>=1.50.0
+requests>=2.31.0
 
 # Utilities
 python-dotenv>=1.0.0

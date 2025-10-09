@@ -26,8 +26,8 @@ COPY . .
 # Création des répertoires nécessaires
 RUN mkdir -p models mlruns data
 
-# Port pour MLflow UI (optionnel)
-EXPOSE 5001
+# Ports pour les services
+EXPOSE 5001 8000 8501
 
 # Commande par défaut (peut être surchargée)
 CMD ["python", "train_advanced_model.py"]

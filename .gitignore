@@ -44,12 +44,9 @@ wheels/
 /mlruns_backup_20251007_061200/
 /mlartifacts/
 
-# Modèles entraînés
-/models/*.pkl
-/models/*.h5
-/models/*.joblib
-/models/*.pt
-/models/*.pth
+# Modèles entraînés (ignorer tout le contenu sauf structure)
+/models/*
+!/models/.gitkeep
 
 # Données (garder structure, pas les fichiers)
 /data/*.csv
@@ -87,7 +84,6 @@ coverage.xml
 aws-credentials.json
 /mlruns_backup_*/
 /reports/
-/models/archived/
-/models/production/
-/models/staging/
 /mlruns/
+/generate_mlflow_report.py
+/memory_monitor_*.csv

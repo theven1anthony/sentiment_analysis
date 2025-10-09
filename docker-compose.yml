@@ -14,7 +14,11 @@ services:
       - ./train_simple_model.py:/app/train_simple_model.py
       - ./train_word2vec_model.py:/app/train_word2vec_model.py
       - ./train_fasttext_model.py:/app/train_fasttext_model.py
+      - ./train_glove_model.py:/app/train_glove_model.py
       - ./train_use_model.py:/app/train_use_model.py
+      - ./train_bert_model.py:/app/train_bert_model.py
+      - ./deploy_best_model.py:/app/deploy_best_model.py
+      - ./optimize_hyperparameters.py:/app/optimize_hyperparameters.py
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5001
     command: python train_advanced_model.py
@@ -35,6 +39,51 @@ services:
     command: mlflow ui --host 0.0.0.0 --port 5001
     networks:
       - sentiment_net
+
+  # Service API FastAPI pour les prédictions
+  api:
+    build: .
+    container_name: sentiment_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api:/app/api
+      - ./src:/app/src
+      - ./models:/app/models
+      - ./mlruns:/app/mlruns
+    environment:
+      # Configuration MLflow
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
+      # Configuration du chargement du modèle (fichier local en fallback)
+      - MODEL_URI_PATH=/app/models/production/model_uri.txt
+      - MODEL_METADATA_PATH=/app/models/production/metadata.pkl
+      # Configuration alertes
+      - ALERT_WINDOW_MINUTES=5
+      - ALERT_THRESHOLD=3
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - sentiment_net
+    depends_on:
+      - mlflow
+
+  # Service Streamlit pour l'interface utilisateur
+  streamlit:
+    build: .
+    container_name: sentiment_streamlit
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./interface:/app/interface
+      - ./api:/app/api
+      - ./src:/app/src
+      - ./models:/app/models
+    environment:
+      - API_URL=http://api:8000
+    command: streamlit run interface/app.py --server.port=8501 --server.address=0.0.0.0
+    networks:
+      - sentiment_net
+    depends_on:
+      - api
 
 networks:
   sentiment_net:

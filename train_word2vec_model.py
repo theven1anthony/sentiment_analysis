@@ -13,6 +13,7 @@ import os
 import sys
 import pandas as pd
 import numpy as np
+import pickle
 import mlflow
 import mlflow.tensorflow
 import click
@@ -27,6 +28,7 @@ from preprocessing.text_cleaner import TextCleaner, load_sentiment140_data
 from embeddings.word2vec_embedding import Word2VecEmbedding
 from utils.model_utils import build_neural_network, get_training_callbacks
 from evaluation.metrics import ModelEvaluator, log_training_history
+from models.word2vec_sentiment_model import Word2VecSentimentModel
 from sklearn.model_selection import train_test_split
 
 logging.basicConfig(level=logging.INFO)
@@ -120,7 +122,7 @@ def train_word2vec_model(X_train, y_train, X_val, y_val, X_test, y_test,
     metrics['epochs_trained'] = len(history.history['loss'])
     metrics['vocab_size'] = vocab_size
 
-    return model, metrics, history
+    return model, metrics, history, w2v
 
 
 @click.command()
@@ -240,7 +242,7 @@ def main(technique, description, experiment_name, sample_size, with_lstm, vector
             run_name = f"word2vec_{technique_name}_{arch_name}"
 
             with mlflow.start_run(run_name=run_name):
-                model, metrics, history = train_word2vec_model(
+                model, metrics, history, w2v = train_word2vec_model(
                     X_train, y_train, X_val, y_val, X_test, y_test,
                     technique_name, with_lstm, vector_size
                 )
@@ -262,8 +264,63 @@ def main(technique, description, experiment_name, sample_size, with_lstm, vector
                 # Log courbes d'entraînement
                 log_training_history(history.history, model_name=run_name)
 
-                # Log modèle
-                mlflow.tensorflow.log_model(model, "model")
+                # Sauvegarder le modèle complet en tant que pyfunc MLflow
+                print(f"\nSauvegarde du modèle pyfunc MLflow...")
+
+                import tempfile
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    # Sauvegarder le modèle Keras
+                    keras_model_path = os.path.join(tmpdir, "keras_model.keras")
+                    model.save(keras_model_path)
+
+                    # Sauvegarder l'embedding Word2Vec
+                    w2v_path = os.path.join(tmpdir, "word2vec_embedding.pkl")
+                    with open(w2v_path, 'wb') as f:
+                        pickle.dump(w2v, f)
+
+                    # Créer le fichier de métadonnées technique
+                    technique_path = os.path.join(tmpdir, "technique.txt")
+                    with open(technique_path, 'w') as f:
+                        f.write(technique_name)
+
+                    # Définir les artifacts
+                    artifacts = {
+                        "keras_model": keras_model_path,
+                        "word2vec_embedding": w2v_path,
+                        "technique": technique_path
+                    }
+
+                    # Définir le conda_env avec versions compatibles
+                    import tensorflow as tf_version
+                    conda_env = {
+                        'channels': ['defaults', 'conda-forge'],
+                        'dependencies': [
+                            f'python={sys.version_info.major}.{sys.version_info.minor}',
+                            'pip',
+                            {
+                                'pip': [
+                                    f'mlflow=={mlflow.__version__}',
+                                    f'tensorflow=={tf_version.__version__}',
+                                    'numpy>=1.26.0',
+                                    'pandas>=2.0.0',
+                                    'scikit-learn>=1.3.0',
+                                    'gensim>=4.3.2',
+                                    'nltk>=3.9.0'
+                                ]
+                            }
+                        ],
+                        'name': 'word2vec_sentiment_env'
+                    }
+
+                    # Logger le modèle pyfunc
+                    mlflow.pyfunc.log_model(
+                        artifact_path="model",
+                        python_model=Word2VecSentimentModel(),
+                        artifacts=artifacts,
+                        conda_env=conda_env
+                    )
+
+                    print(f"✓ Modèle pyfunc MLflow sauvegardé (Keras + Word2Vec + preprocessing)")
 
                 # Tags
                 if description:

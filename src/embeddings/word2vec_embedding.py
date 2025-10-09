@@ -150,6 +150,41 @@ class Word2VecEmbedding:
         self.fit(texts)
         return self.transform(texts, max_len=max_len, average=average)
 
+    def transform_batched(self, texts: List[str], max_len: int = 50, average: bool = False,
+                          batch_size: int = 5000) -> np.ndarray:
+        """
+        Transforme les textes en embeddings par batches (économie mémoire).
+
+        Args:
+            texts: Liste de textes à transformer
+            max_len: Longueur maximale des séquences
+            average: Si True, embeddings moyennés, sinon séquences
+            batch_size: Taille des batches (défaut: 5000)
+
+        Returns:
+            Matrice numpy des embeddings
+        """
+        if self.model is None:
+            raise ValueError("Le modèle doit être entraîné avant transformation")
+
+        logger.info(f"Transformation par batches ({batch_size} textes/batch)...")
+
+        n_samples = len(texts)
+        n_batches = (n_samples + batch_size - 1) // batch_size
+
+        batches = []
+        for i in range(n_batches):
+            start_idx = i * batch_size
+            end_idx = min((i + 1) * batch_size, n_samples)
+            batch_texts = texts[start_idx:end_idx]
+
+            logger.info(f"  Batch {i+1}/{n_batches} ({start_idx}:{end_idx})...")
+            batch_emb = self.transform(batch_texts, max_len=max_len, average=average)
+            batches.append(batch_emb)
+
+        logger.info("Concaténation des batches...")
+        return np.vstack(batches) if average else np.concatenate(batches, axis=0)
+
     def get_params(self) -> dict:
         """Retourne les paramètres du modèle pour logging MLflow."""
         return {
