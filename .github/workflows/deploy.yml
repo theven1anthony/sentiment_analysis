@@ -42,15 +42,9 @@ jobs:
           cp -r models deploy-package/
           cp requirements-api.txt deploy-package/requirements.txt
 
-          # Créer le fichier de configuration pour Azure
-          cat > deploy-package/startup.sh << 'EOF'
-          #!/bin/bash
-          # Script de démarrage pour Azure App Service
-          cd /home/site/wwwroot
-          gunicorn --bind 0.0.0.0:8000 --workers 1 --timeout 600 api.main:app
-          EOF
-
-          chmod +x deploy-package/startup.sh
+          # Créer le fichier de démarrage pour Azure
+          # Azure cherche startup.txt ou utilise gunicorn par défaut
+          echo "gunicorn --bind=0.0.0.0 --timeout 600 api.main:app --worker-class uvicorn.workers.UvicornWorker" > deploy-package/startup.txt
 
           # Créer le README de déploiement
           echo "Déploiement: $(date)" > deploy-package/DEPLOYMENT_INFO.txt
