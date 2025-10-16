@@ -202,39 +202,64 @@ az monitor action-group show \
 
 ### 6.2 Créer les règles d'alerte
 
-**Alerte 1 : Erreurs HTTP 5xx**
+**Alerte principale : Misclassifications (3 tweets mal classés en 5 minutes)**
+
+Cette alerte surveille les événements customEvents dans Application Insights pour détecter quand l'API FastAPI log un événement `alert_triggered` avec le type `high_misclassification_rate`.
 
 ```bash
-# Créer une alerte pour les erreurs HTTP 5xx (équivalent critère projet : 3 erreurs en 5 min)
-az monitor metrics alert create \
-  --name high-error-rate \
+# Créer l'alerte scheduled query pour les misclassifications
+az monitor scheduled-query create \
+  --name high-misclassification-rate \
   --resource-group sentiment-analysis-rg \
-  --scopes $(az webapp show --name sentiment-analysis-api --resource-group sentiment-analysis-rg --query id --output tsv) \
-  --condition "total Http5xx > 3" \
+  --scopes $(az monitor app-insights component show --app sentiment-api-insights --resource-group sentiment-analysis-rg --query id -o tsv) \
+  --condition "count 'MisclassificationEvents' > 0" \
+  --condition-query MisclassificationEvents="customEvents | where name == 'alert_triggered' and customDimensions.alert_type == 'high_misclassification_rate'" \
   --window-size 5m \
-  --evaluation-frequency 1m \
-  --action sentiment-alerts \
-  --description "Alerte si plus de 3 erreurs 5xx en 5 minutes"
+  --evaluation-frequency 5m \
+  --action-groups $(az monitor action-group show --name sentiment-alerts --resource-group sentiment-analysis-rg --query id -o tsv) \
+  --description "Alerte déclenchée si 3 tweets mal classés en 5 minutes (detecté par l'API)" \
+  --severity 2
 ```
 
-**Alerte 2 : Temps de réponse élevé**
+**Fonctionnement** :
+1. L'endpoint `/feedback` de l'API détecte quand 3 tweets sont mal classés en 5 minutes
+2. L'API log un événement `alert_triggered` dans Application Insights
+3. Azure Monitor exécute cette requête toutes les 5 minutes
+4. Si l'événement est détecté, l'Action Group est déclenché (email/SMS envoyé)
+
+**Vérifier l'alerte** :
 
 ```bash
-# Créer une alerte pour le temps de réponse
+# Lister les alertes scheduled query
+az monitor scheduled-query list \
+  --resource-group sentiment-analysis-rg \
+  --query "[].{Name:name, Enabled:enabled, Description:description}" \
+  --output table
+
+# Afficher les détails
+az monitor scheduled-query show \
+  --name high-misclassification-rate \
+  --resource-group sentiment-analysis-rg
+```
+
+**Alertes optionnelles (monitoring technique)** :
+
+Pour monitorer la santé technique de l'application, vous pouvez ajouter :
+
+```bash
+# Alerte temps de réponse élevé
 az monitor metrics alert create \
   --name high-response-time \
   --resource-group sentiment-analysis-rg \
-  --scopes $(az webapp show --name sentiment-analysis-api --resource-group sentiment-analysis-rg --query id --output tsv) \
-  --condition "avg AverageResponseTime > 200" \
+  --scopes $(az webapp show --name sentiment-api-at2025 --resource-group sentiment-analysis-rg --query id --output tsv) \
+  --condition "avg AverageResponseTime > 500" \
   --window-size 5m \
   --evaluation-frequency 1m \
   --action sentiment-alerts \
-  --description "Alerte si temps de réponse moyen > 200ms pendant 5 min"
+  --description "Alerte si temps de réponse moyen > 500ms pendant 5 min"
 ```
 
-**Alerte 3 : Alerte personnalisée (3 tweets mal classés)**
-
-Cette alerte sera créée programmatiquement via le code Python (`src/monitoring/azure_monitor_integration.py`) en utilisant des métriques custom Application Insights.
+**Note** : L'alerte de misclassification est l'exigence principale du projet (critère CE2 - Suivi de performance en production).
 
 ### 6.3 Ajouter des alertes SMS (optionnel)
 
