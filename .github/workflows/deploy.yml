@@ -1,0 +1,151 @@
+name: CD - Déploiement AWS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Permet déclenchement manuel
+
+env:
+  AWS_REGION: eu-west-1  # À adapter selon votre région
+  EB_APPLICATION_NAME: sentiment-analysis-api
+  EB_ENVIRONMENT_NAME: sentiment-analysis-api-prod
+  DEPLOY_PACKAGE_NAME: deploy-${{ github.sha }}.zip
+
+jobs:
+  deploy:
+    name: Déploiement sur AWS Elastic Beanstalk
+    runs-on: ubuntu-latest
+    # Ne déploie que si les tests CI passent
+    needs: []  # Ajouter needs: [ci] si vous voulez attendre CI d'abord
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Configuration AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Préparation du package de déploiement
+        run: |
+          # Copier uniquement les fichiers nécessaires
+          mkdir -p deploy-package
+
+          # Code source
+          cp -r api deploy-package/
+          cp -r src deploy-package/
+
+          # Configuration
+          cp Dockerfile deploy-package/
+          cp requirements.txt deploy-package/
+          cp .env.example deploy-package/.env
+
+          # Configuration Elastic Beanstalk
+          mkdir -p deploy-package/.ebextensions
+          cp -r .ebextensions/* deploy-package/.ebextensions/ 2>/dev/null || true
+
+          # Créer le README de déploiement
+          echo "Déploiement: $(date)" > deploy-package/DEPLOYMENT_INFO.txt
+          echo "Commit: ${{ github.sha }}" >> deploy-package/DEPLOYMENT_INFO.txt
+          echo "Branch: ${{ github.ref_name }}" >> deploy-package/DEPLOYMENT_INFO.txt
+
+          # Créer le ZIP
+          cd deploy-package
+          zip -r ../${{ env.DEPLOY_PACKAGE_NAME }} . -x "*.git*" "*.pytest_cache*" "__pycache__*"
+          cd ..
+
+      - name: Upload vers S3
+        run: |
+          aws s3 cp ${{ env.DEPLOY_PACKAGE_NAME }} \
+            s3://${{ env.EB_APPLICATION_NAME }}-deployments/${{ env.DEPLOY_PACKAGE_NAME }}
+
+      - name: Création de la version EB
+        run: |
+          aws elasticbeanstalk create-application-version \
+            --application-name ${{ env.EB_APPLICATION_NAME }} \
+            --version-label ${{ github.sha }} \
+            --description "Commit ${{ github.sha }} sur ${{ github.ref_name }}" \
+            --source-bundle S3Bucket="${{ env.EB_APPLICATION_NAME }}-deployments",S3Key="${{ env.DEPLOY_PACKAGE_NAME }}" \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Déploiement sur EB
+        run: |
+          aws elasticbeanstalk update-environment \
+            --application-name ${{ env.EB_APPLICATION_NAME }} \
+            --environment-name ${{ env.EB_ENVIRONMENT_NAME }} \
+            --version-label ${{ github.sha }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Attente du déploiement
+        run: |
+          echo "⏳ Attente de la fin du déploiement..."
+          aws elasticbeanstalk wait environment-updated \
+            --application-name ${{ env.EB_APPLICATION_NAME }} \
+            --environment-name ${{ env.EB_ENVIRONMENT_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Vérification du Health Check
+        run: |
+          ENDPOINT=$(aws elasticbeanstalk describe-environments \
+            --application-name ${{ env.EB_APPLICATION_NAME }} \
+            --environment-names ${{ env.EB_ENVIRONMENT_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Environments[0].CNAME' \
+            --output text)
+
+          echo "🌐 API URL: http://$ENDPOINT"
+
+          # Test du endpoint /health
+          for i in {1..5}; do
+            if curl -f "http://$ENDPOINT/health"; then
+              echo "✅ Health check réussi"
+              exit 0
+            fi
+            echo "⏳ Tentative $i/5..."
+            sleep 10
+          done
+
+          echo "❌ Health check échoué"
+          exit 1
+
+      - name: Résumé du déploiement
+        if: always()
+        run: |
+          ENDPOINT=$(aws elasticbeanstalk describe-environments \
+            --application-name ${{ env.EB_APPLICATION_NAME }} \
+            --environment-names ${{ env.EB_ENVIRONMENT_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Environments[0].CNAME' \
+            --output text)
+
+          echo "## 🚀 Déploiement AWS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Application**: ${{ env.EB_APPLICATION_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environnement**: ${{ env.EB_ENVIRONMENT_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Région**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**URL de l'API**: http://$ENDPOINT" >> $GITHUB_STEP_SUMMARY
+          echo "**Health Check**: http://$ENDPOINT/health" >> $GITHUB_STEP_SUMMARY
+          echo "**Documentation**: http://$ENDPOINT/docs" >> $GITHUB_STEP_SUMMARY
+
+  notification:
+    name: Notification
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always()
+
+    steps:
+      - name: Notification de succès
+        if: needs.deploy.result == 'success'
+        run: |
+          echo "✅ Déploiement réussi sur AWS Elastic Beanstalk"
+
+      - name: Notification d'échec
+        if: needs.deploy.result == 'failure'
+        run: |
+          echo "❌ Échec du déploiement"
+          exit 1

@@ -21,5 +21,7 @@ python-dotenv>=1.0.0
 requests>=2.32.0
 pydantic>=2.0.0
 
-# Monitoring AWS
-boto3>=1.35.0
+# Monitoring Azure
+azure-monitor-opentelemetry>=1.6.0
+opentelemetry-instrumentation-fastapi>=0.48b0
+azure-identity>=1.17.0

@@ -9,7 +9,7 @@ import pickle
 import uuid
 from datetime import datetime, timedelta
 from collections import deque
-from typing import Optional
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,11 +34,30 @@ MODEL_METADATA_PATH = os.getenv("MODEL_METADATA_PATH", "./models/production/meta
 ALERT_WINDOW_MINUTES = 5
 ALERT_THRESHOLD = 3
 
+# Variables globales
+model = None
+model_metadata = {}
+misclassified_queue = deque()  # Queue pour stocker les erreurs dans la fenêtre de 5 min
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """
+    Gestionnaire de cycle de vie de l'application.
+    Remplace les anciens @app.on_event("startup") et @app.on_event("shutdown").
+    """
+    # Startup: charge le modèle au démarrage
+    load_model()
+    yield
+    # Shutdown: nettoyage si nécessaire (pas utilisé pour l'instant)
+
+
 # Initialisation de l'application
 app = FastAPI(
     title="Air Paradis Sentiment Analysis API",
     description="API de prédiction de sentiment pour tweets",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS pour permettre les requêtes depuis Streamlit
@@ -50,106 +69,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Variables globales
-model = None
-model_metadata = {}
-misclassified_queue = deque()  # Queue pour stocker les erreurs dans la fenêtre de 5 min
-
 
 def load_model():
     """
-    Charge le modèle pyfunc MLflow et ses métadonnées au démarrage.
-
-    Supporte deux modes:
-    1. Production (AWS): Variables d'environnement MODEL_NAME + MODEL_STAGE/MODEL_VERSION
-    2. Développement: Fichier local model_uri.txt
+    Charge le modèle pyfunc sauvegardé et ses métadonnées au démarrage.
+    Fonctionne en local et sur Azure sans dépendance à MLflow.
     """
     global model, model_metadata
 
     try:
-        model_uri = None
+        # Chemin du modèle pyfunc sauvegardé
+        model_path = os.getenv("MODEL_PATH", "./models/production/pyfunc_model/model")
 
-        # Mode 1: Variables d'environnement (prioritaire pour déploiement AWS)
-        model_name = os.getenv("MODEL_NAME")
-        model_version = os.getenv("MODEL_VERSION")
-        model_stage = os.getenv("MODEL_STAGE", "Production")
-
-        if model_name:
-            # Charger depuis MLflow Model Registry
-            if model_stage and not model_version:
-                model_uri = f"models:/{model_name}/{model_stage}"
-                print(f"✓ Configuration depuis variables d'environnement:")
-                print(f"  MODEL_NAME={model_name}")
-                print(f"  MODEL_STAGE={model_stage}")
-            elif model_version:
-                model_uri = f"models:/{model_name}/{model_version}"
-                print(f"✓ Configuration depuis variables d'environnement:")
-                print(f"  MODEL_NAME={model_name}")
-                print(f"  MODEL_VERSION={model_version}")
-            else:
-                model_uri = f"models:/{model_name}/Production"
-                print(f"✓ Configuration depuis variables d'environnement:")
-                print(f"  MODEL_NAME={model_name}")
-                print(f"  MODEL_STAGE=Production (défaut)")
-
-        # Mode 2: Fallback sur fichier local (développement)
-        elif os.path.exists(MODEL_URI_PATH):
-            with open(MODEL_URI_PATH, 'r') as f:
-                model_uri = f.read().strip()
-            print(f"✓ Configuration depuis fichier local:")
-            print(f"  Fichier: {MODEL_URI_PATH}")
-
-            # Charger les métadonnées locales si disponibles
-            if os.path.exists(MODEL_METADATA_PATH):
-                with open(MODEL_METADATA_PATH, 'rb') as f:
-                    model_metadata = pickle.load(f)
-                print(f"✓ Métadonnées locales chargées:")
-                print(f"  Type: {model_metadata.get('model_type', 'unknown')}")
-                print(f"  F1-Score: {model_metadata.get('f1_score', 0):.4f}")
-
-        else:
-            # Aucune configuration disponible
-            print(f"✗ Configuration manquante:")
-            print(f"  Option 1 (Production): Définir MODEL_NAME et optionnellement MODEL_STAGE/MODEL_VERSION")
-            print(f"  Option 2 (Développement): Exécuter python deploy_best_model.py --name <model_name> --version <version>")
+        # Vérifier que le modèle existe
+        if not os.path.exists(model_path):
+            print(f"✗ Modèle non trouvé: {model_path}")
+            print(f"\nPour déployer un modèle:")
+            print(f"  python deploy_model.py --name w2v_200K_model --version 2")
             model = None
             return
 
-        # Charger le modèle pyfunc MLflow
-        print(f"\nChargement du modèle depuis: {model_uri}")
-        model = mlflow.pyfunc.load_model(model_uri)
+        # Charger le modèle pyfunc depuis le système de fichiers
+        print(f"Chargement du modèle depuis: {model_path}")
+        model = mlflow.pyfunc.load_model(model_path)
         print(f"✓ Modèle pyfunc chargé (pipeline complet: preprocessing + embedding + prédiction)")
 
-        # Récupérer les métadonnées depuis MLflow si pas déjà chargées
-        if not model_metadata and model_name:
-            try:
-                client = mlflow.MlflowClient()
-                if model_version:
-                    model_version_info = client.get_model_version(model_name, model_version)
-                else:
-                    # Récupérer la dernière version du stage
-                    versions = client.get_latest_versions(model_name, stages=[model_stage])
-                    if versions:
-                        model_version_info = versions[0]
-                    else:
-                        raise ValueError(f"Aucune version trouvée pour {model_name}/{model_stage}")
-
-                run = mlflow.get_run(model_version_info.run_id)
-                model_metadata = {
-                    'model_name': model_name,
-                    'model_version': model_version_info.version,
-                    'run_id': model_version_info.run_id,
-                    'model_type': run.data.params.get('architecture', 'unknown'),
-                    'technique': run.data.params.get('technique', 'unknown'),
-                    'f1_score': run.data.metrics.get('f1_score'),
-                    'accuracy': run.data.metrics.get('accuracy'),
-                    'training_date': run.info.start_time
-                }
-                print(f"✓ Métadonnées récupérées depuis MLflow:")
-                print(f"  Type: {model_metadata.get('model_type')}")
-                print(f"  F1-Score: {model_metadata.get('f1_score', 0):.4f}")
-            except Exception as e:
-                print(f"⚠ Impossible de récupérer les métadonnées depuis MLflow: {e}")
+        # Charger les métadonnées si disponibles (remonter de 2 niveaux depuis model/)
+        metadata_path = os.path.join(os.path.dirname(os.path.dirname(model_path)), "metadata.pkl")
+        if os.path.exists(metadata_path):
+            with open(metadata_path, 'rb') as f:
+                model_metadata = pickle.load(f)
+            print(f"✓ Métadonnées chargées:")
+            print(f"  Modèle: {model_metadata.get('model_name', 'unknown')}")
+            print(f"  Version: {model_metadata.get('model_version', 'unknown')}")
+            print(f"  Type: {model_metadata.get('model_type', 'unknown')}")
+            print(f"  F1-Score: {model_metadata.get('f1_score', 0):.4f}")
+            print(f"  Accuracy: {model_metadata.get('accuracy', 0):.4f}")
+        else:
+            print(f"⚠ Métadonnées non disponibles")
 
     except Exception as e:
         print(f"✗ Erreur lors du chargement du modèle: {e}")
@@ -166,12 +123,6 @@ def clean_old_misclassifications():
 
     while misclassified_queue and misclassified_queue[0] < cutoff_time:
         misclassified_queue.popleft()
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Événement de démarrage : charge le modèle."""
-    load_model()
 
 
 @app.get("/", tags=["Root"])
@@ -203,7 +154,7 @@ async def predict(request: PredictRequest):
     if model is None:
         raise HTTPException(
             status_code=503,
-            detail="Modèle non chargé. Exécutez: python deploy_best_model.py --name <model_name> --version <version>"
+            detail="Modèle non chargé. Exécutez: python deploy_model.py --name <model_name> --version <version>"
         )
 
     try:
@@ -269,7 +220,7 @@ async def feedback(request: FeedbackRequest):
             if len(misclassified_queue) >= ALERT_THRESHOLD:
                 alert_triggered = True
 
-                # TODO: Intégration AWS CloudWatch / SNS pour envoyer l'alerte
+                # TODO: Intégration Azure Monitor / Action Groups pour envoyer l'alerte
                 print(f"⚠️  ALERTE: {len(misclassified_queue)} erreurs en {ALERT_WINDOW_MINUTES} minutes")
                 print(f"   Texte: {request.text[:50]}...")
                 print(f"   Prédit: {request.predicted_sentiment}, Réel: {request.actual_sentiment}")
@@ -294,7 +245,7 @@ async def feedback(request: FeedbackRequest):
 async def health():
     """
     Health check de l'API.
-    Utilisé par AWS CloudWatch pour monitoring.
+    Utilisé par Azure Monitor pour monitoring.
 
     Returns:
         Statut de santé de l'API et du modèle

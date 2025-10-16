@@ -1,0 +1,75 @@
+# Fichiers à exclure du package de déploiement Elastic Beanstalk
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# Données et modèles (sauf production)
+data/
+mlruns/
+mlruns_backup_*/
+models/checkpoints/
+models/staging/
+models/archived/
+models/bert_*/
+
+# Notebooks et expérimentations
+notebooks/
+*.ipynb
+.ipynb_checkpoints
+
+# Tests et coverage
+tests/
+.pytest_cache/
+htmlcov/
+.coverage
+.tox/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs/
+*.log
+memory_monitor_*.csv
+
+# Scripts d'entraînement (pas nécessaires en production)
+train_*.py
+optimize_hyperparameters.py
+generate_mlflow_report.py
+deploy_model.py
+
+# Interface Streamlit (tests locaux uniquement)
+interface/
+
+# Configuration locale
+.env
+.env.local
+docker-compose.yml
+Dockerfile.dev
+
+# Rapports
+reports/
+
+# GitHub
+.github/

@@ -1,0 +1,29 @@
+artifact_path: mlflow-artifacts:/563116797599679167/models/m-8e0d848f8bad4deab18606691fe61d28/artifacts
+flavors:
+  python_function:
+    artifacts:
+      keras_model:
+        path: artifacts/keras_model.keras
+        uri: /tmp/tmp946yx_yf/keras_model.keras
+      technique:
+        path: artifacts/technique.txt
+        uri: /tmp/tmp946yx_yf/technique.txt
+      word2vec_embedding:
+        path: artifacts/word2vec_embedding.pkl
+        uri: /tmp/tmp946yx_yf/word2vec_embedding.pkl
+    cloudpickle_version: 3.1.1
+    code: null
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.pyfunc.model
+    python_model: python_model.pkl
+    python_version: 3.12.11
+    streamable: false
+mlflow_version: 3.4.0
+model_id: m-8e0d848f8bad4deab18606691fe61d28
+model_size_bytes: 21492497
+model_uuid: m-8e0d848f8bad4deab18606691fe61d28
+prompts: null
+run_id: 6e0d136b138248ee9d92f4473c248592
+utc_time_created: '2025-10-09 06:58:57.641778'
