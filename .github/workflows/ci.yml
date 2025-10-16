@@ -82,8 +82,21 @@ jobs:
             -e MODEL_NAME=test_model \
             sentiment-api:test \
             uvicorn api.main:app --host 0.0.0.0 --port 8000
-          sleep 10
-          curl -f http://localhost:8000/ || (docker logs test-api && exit 1)
+
+          echo "⏳ Attente du démarrage de l'API..."
+          sleep 15
+
+          echo "🔍 Test du endpoint /health..."
+          if curl -f http://localhost:8000/health; then
+            echo "✅ API health check réussi"
+          else
+            echo "❌ API health check échoué, logs du conteneur:"
+            docker logs test-api
+            docker stop test-api
+            docker rm test-api
+            exit 1
+          fi
+
           docker stop test-api
           docker rm test-api
 
