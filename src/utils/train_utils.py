@@ -6,24 +6,80 @@ train_fasttext_model.py, train_use_model.py, et train_bert_model.py.
 """
 
 import os
-import sys
 import pandas as pd
 import mlflow
 from datetime import datetime
 from sklearn.model_selection import train_test_split
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Protocol, Callable
 
-# Ajouter le dossier src au path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+from src.preprocessing.text_cleaner import TextCleaner, load_sentiment140_data
 
-from preprocessing.text_cleaner import TextCleaner, load_sentiment140_data
+
+# Interfaces et abstractions pour injection de dépendances
+class MLflowLoggerProtocol(Protocol):
+    """Protocole pour logger MLflow (permettant le mocking)."""
+
+    def set_tag(self, key: str, value: str) -> None:
+        """Définit un tag MLflow."""
+        ...
+
+    def log_params(self, params: Dict[str, Any]) -> None:
+        """Log des paramètres MLflow."""
+        ...
+
+    def log_metrics(self, metrics: Dict[str, Any]) -> None:
+        """Log des métriques MLflow."""
+        ...
+
+    def start_run(self, run_name: str):
+        """Démarre une run MLflow."""
+        ...
+
+
+class MLflowLogger:
+    """Wrapper autour de MLflow pour faciliter le mocking dans les tests."""
+
+    def set_tag(self, key: str, value: str) -> None:
+        mlflow.set_tag(key, value)
+
+    def log_params(self, params: Dict[str, Any]) -> None:
+        mlflow.log_params(params)
+
+    def log_metrics(self, metrics: Dict[str, Any]) -> None:
+        mlflow.log_metrics(metrics)
+
+    def start_run(self, run_name: str):
+        return mlflow.start_run(run_name=run_name)
+
+
+class OutputLogger(Protocol):
+    """Protocole pour logger de sortie (permettant le mocking)."""
+
+    def info(self, message: str) -> None:
+        """Log un message d'information."""
+        ...
+
+
+class PrintLogger:
+    """Logger par défaut qui utilise print() pour l'output."""
+
+    def info(self, message: str) -> None:
+        print(message)
+
+
+# Instances par défaut pour la rétrocompatibilité
+_default_mlflow_logger = MLflowLogger()
+_default_output_logger = PrintLogger()
 
 
 def load_and_preprocess_data(
     data_path: str,
     sample_size: Optional[int] = None,
     handle_negations: bool = True,
-    handle_emotions: bool = True
+    handle_emotions: bool = True,
+    cleaner: Optional[TextCleaner] = None,
+    data_loader: Optional[Callable] = None,
+    logger: Optional[OutputLogger] = None
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Charge et prétraite les données du dataset Sentiment140.
@@ -33,22 +89,31 @@ def load_and_preprocess_data(
         sample_size: Taille de l'échantillon (None = dataset complet)
         handle_negations: Activer la gestion des négations
         handle_emotions: Activer la préservation des émoticons
+        cleaner: Instance de TextCleaner (optionnel, par défaut création automatique)
+        data_loader: Fonction de chargement (optionnel, par défaut load_sentiment140_data)
+        logger: Logger pour affichage (optionnel, par défaut PrintLogger)
 
     Returns:
         Tuple (df_processed, preprocessing_info)
     """
-    print("Chargement des données...")
-    df = load_sentiment140_data(data_path, sample_size=sample_size)
-    print(f"Dataset chargé: {len(df):,} échantillons")
-    print(f"Distribution: {df['sentiment'].value_counts().to_dict()}")
+    if logger is None:
+        logger = _default_output_logger
+    if cleaner is None:
+        cleaner = TextCleaner()
+    if data_loader is None:
+        data_loader = load_sentiment140_data
 
-    print("\nPrétraitement des données...")
-    cleaner = TextCleaner()
+    logger.info("Chargement des données...")
+    df = data_loader(data_path, sample_size=sample_size)
+    logger.info(f"Dataset chargé: {len(df):,} échantillons")
+    logger.info(f"Distribution: {df['sentiment'].value_counts().to_dict()}")
+
+    logger.info("\nPrétraitement des données...")
 
     df_processed = df.copy()
 
     # Stemming
-    print("  Stemming...")
+    logger.info("  Stemming...")
     df_processed['text_stemmed'] = cleaner.preprocess_with_techniques(
         df['text'].tolist(),
         technique='stemming',
@@ -58,7 +123,7 @@ def load_and_preprocess_data(
     df_processed = df_processed[df_processed['text_stemmed'].str.len() > 0].reset_index(drop=True)
 
     # Lemmatization
-    print("  Lemmatization...")
+    logger.info("  Lemmatization...")
     df_processed['text_lemmatized'] = cleaner.preprocess_with_techniques(
         df_processed['text'].tolist(),
         technique='lemmatization',
@@ -67,7 +132,7 @@ def load_and_preprocess_data(
     )
     df_processed = df_processed[df_processed['text_lemmatized'].str.len() > 0].reset_index(drop=True)
 
-    print(f"Textes valides: {len(df_processed):,}")
+    logger.info(f"Textes valides: {len(df_processed):,}")
 
     preprocessing_info = {
         'initial_size': len(df),
@@ -83,7 +148,8 @@ def create_train_val_test_splits(
     df: pd.DataFrame,
     test_size: float = 0.3,
     val_ratio: float = 0.5,
-    random_state: int = 42
+    random_state: int = 42,
+    logger: Optional[OutputLogger] = None
 ) -> Dict[str, List[int]]:
     """
     Crée des splits train/validation/test stratifiés.
@@ -93,11 +159,15 @@ def create_train_val_test_splits(
         test_size: Proportion de données pour validation + test (défaut: 0.3)
         val_ratio: Ratio validation/test dans test_size (défaut: 0.5, soit 15%/15%)
         random_state: Seed pour reproductibilité
+        logger: Logger pour affichage (optionnel, par défaut PrintLogger)
 
     Returns:
         Dict avec clés 'train_idx', 'val_idx', 'test_idx'
     """
-    print(f"  Création des splits train/val/test ({int((1-test_size)*100)}/{int(test_size*val_ratio*100)}/{int(test_size*(1-val_ratio)*100)})...")
+    if logger is None:
+        logger = _default_output_logger
+
+    logger.info(f"  Création des splits train/val/test ({int((1-test_size)*100)}/{int(test_size*val_ratio*100)}/{int(test_size*(1-val_ratio)*100)})...")
 
     # Split initial train/temp (70/30 par défaut)
     train_idx, temp_idx = train_test_split(
@@ -121,7 +191,7 @@ def create_train_val_test_splits(
         'test_idx': test_idx
     }
 
-    print(f"  Train={len(train_idx)}, Val={len(val_idx)}, Test={len(test_idx)}")
+    logger.info(f"  Train={len(train_idx)}, Val={len(val_idx)}, Test={len(test_idx)}")
 
     return splits_data
 
@@ -187,7 +257,8 @@ def filter_metrics_for_mlflow(metrics: Dict[str, Any]) -> Dict[str, Any]:
 def log_common_mlflow_info(
     description: Optional[str],
     model_type: str,
-    additional_tags: Optional[Dict[str, str]] = None
+    additional_tags: Optional[Dict[str, str]] = None,
+    mlflow_logger: Optional[MLflowLoggerProtocol] = None
 ) -> None:
     """
     Log les informations communes dans MLflow (tags, description).
@@ -196,14 +267,18 @@ def log_common_mlflow_info(
         description: Description optionnelle de l'expérimentation
         model_type: Type du modèle (ex: 'word2vec_neural', 'bert_transformer')
         additional_tags: Tags supplémentaires optionnels
+        mlflow_logger: Logger MLflow (optionnel, par défaut MLflowLogger)
     """
+    if mlflow_logger is None:
+        mlflow_logger = _default_mlflow_logger
+
     if description:
-        mlflow.set_tag("description", description)
-    mlflow.set_tag("model_type", model_type)
+        mlflow_logger.set_tag("description", description)
+    mlflow_logger.set_tag("model_type", model_type)
 
     if additional_tags:
         for key, value in additional_tags.items():
-            mlflow.set_tag(key, value)
+            mlflow_logger.set_tag(key, value)
 
 
 def create_comparison_dataframe(results: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
@@ -319,7 +394,8 @@ CONCLUSION:
 def save_report(
     report: str,
     report_name: str,
-    reports_dir: str = "reports"
+    reports_dir: str = "reports",
+    timestamp_fn: Optional[Callable[[], str]] = None
 ) -> str:
     """
     Sauvegarde un rapport dans un fichier.
@@ -328,11 +404,15 @@ def save_report(
         report: Contenu du rapport
         report_name: Nom de base du rapport (sans extension)
         reports_dir: Répertoire de destination
+        timestamp_fn: Fonction pour générer le timestamp (optionnel, par défaut datetime.now)
 
     Returns:
         Chemin complet du rapport sauvegardé
     """
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    if timestamp_fn is None:
+        timestamp_fn = lambda: datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    timestamp = timestamp_fn()
     report_path = os.path.join(reports_dir, f"{report_name}_{timestamp}.txt")
 
     os.makedirs(reports_dir, exist_ok=True)
@@ -351,7 +431,8 @@ def log_summary_run(
     total_samples: int,
     techniques_tested: int,
     additional_params: Optional[Dict[str, Any]] = None,
-    description: Optional[str] = None
+    description: Optional[str] = None,
+    mlflow_logger: Optional[MLflowLoggerProtocol] = None
 ) -> None:
     """
     Crée une run summary dans MLflow avec les résultats finaux.
@@ -365,11 +446,15 @@ def log_summary_run(
         techniques_tested: Nombre de techniques testées
         additional_params: Paramètres supplémentaires à logger
         description: Description optionnelle
+        mlflow_logger: Logger MLflow (optionnel, par défaut MLflowLogger)
     """
-    with mlflow.start_run(run_name=run_name):
-        mlflow.set_tag("summary_type", "final_report")
+    if mlflow_logger is None:
+        mlflow_logger = _default_mlflow_logger
+
+    with mlflow_logger.start_run(run_name=run_name):
+        mlflow_logger.set_tag("summary_type", "final_report")
         if description:
-            mlflow.set_tag("description", description)
+            mlflow_logger.set_tag("description", description)
 
         # Log paramètres de base
         params = {
@@ -383,7 +468,7 @@ def log_summary_run(
         if additional_params:
             params.update(additional_params)
 
-        mlflow.log_params(params)
+        mlflow_logger.log_params(params)
 
         # Log métriques du meilleur modèle
         summary_metrics = {
@@ -395,14 +480,15 @@ def log_summary_run(
         if 'auc_score' in best_metrics:
             summary_metrics['best_auc_score'] = best_metrics['auc_score']
 
-        mlflow.log_metrics(summary_metrics)
+        mlflow_logger.log_metrics(summary_metrics)
 
 
 def print_training_header(
     model_name: str,
     technique: str,
     description: str,
-    additional_info: Optional[Dict[str, Any]] = None
+    additional_info: Optional[Dict[str, Any]] = None,
+    logger: Optional[OutputLogger] = None
 ) -> None:
     """
     Affiche un header formaté pour le début de l'entraînement.
@@ -412,25 +498,30 @@ def print_training_header(
         technique: Technique de prétraitement
         description: Description de l'expérimentation
         additional_info: Informations supplémentaires à afficher
+        logger: Logger pour affichage (optionnel, par défaut PrintLogger)
     """
+    if logger is None:
+        logger = _default_output_logger
+
     separator = "=" * 60
-    print(f"{separator}")
-    print(f"ENTRAÎNEMENT {model_name}")
-    print(f"{separator}\n")
-    print(f"Technique: {technique}")
-    print(f"Description: {description}")
+    logger.info(f"{separator}")
+    logger.info(f"ENTRAÎNEMENT {model_name}")
+    logger.info(f"{separator}\n")
+    logger.info(f"Technique: {technique}")
+    logger.info(f"Description: {description}")
 
     if additional_info:
         for key, value in additional_info.items():
-            print(f"{key}: {value}")
+            logger.info(f"{key}: {value}")
 
-    print()
+    logger.info("")
 
 
 def print_results_summary(
     technique_name: str,
     metrics: Dict[str, Any],
-    additional_metrics: Optional[List[str]] = None
+    additional_metrics: Optional[List[str]] = None,
+    logger: Optional[OutputLogger] = None
 ) -> None:
     """
     Affiche un résumé formaté des résultats.
@@ -439,45 +530,61 @@ def print_results_summary(
         technique_name: Nom de la technique
         metrics: Dict des métriques
         additional_metrics: Liste de clés de métriques supplémentaires à afficher
+        logger: Logger pour affichage (optionnel, par défaut PrintLogger)
     """
-    print(f"\nRésultats {technique_name}:")
-    print(f"  Accuracy: {metrics['accuracy']:.4f}")
-    print(f"  F1-Score: {metrics['f1_score']:.4f}")
+    if logger is None:
+        logger = _default_output_logger
+
+    logger.info(f"\nRésultats {technique_name}:")
+    logger.info(f"  Accuracy: {metrics['accuracy']:.4f}")
+    logger.info(f"  F1-Score: {metrics['f1_score']:.4f}")
 
     if 'auc_score' in metrics:
-        print(f"  AUC: {metrics.get('auc_score', 0):.4f}")
+        logger.info(f"  AUC: {metrics.get('auc_score', 0):.4f}")
 
-    print(f"  Training time: {metrics['training_time']:.1f}s")
+    logger.info(f"  Training time: {metrics['training_time']:.1f}s")
 
     if additional_metrics:
         for metric_key in additional_metrics:
             if metric_key in metrics:
-                print(f"  {metric_key}: {metrics[metric_key]}")
+                logger.info(f"  {metric_key}: {metrics[metric_key]}")
 
 
-def print_comparison(df_comparison: pd.DataFrame, best_technique: str) -> None:
+def print_comparison(df_comparison: pd.DataFrame, best_technique: str, logger: Optional[OutputLogger] = None) -> None:
     """
     Affiche le tableau comparatif et la meilleure technique.
 
     Args:
         df_comparison: DataFrame comparatif
         best_technique: Nom de la meilleure technique
+        logger: Logger pour affichage (optionnel, par défaut PrintLogger)
     """
-    print("\nCOMPARAISON:")
-    print(df_comparison.to_string(index=False, float_format='%.4f'))
-    print(f"\nMeilleure technique: {best_technique.upper()}")
+    if logger is None:
+        logger = _default_output_logger
+
+    logger.info("\nCOMPARAISON:")
+    logger.info(df_comparison.to_string(index=False, float_format='%.4f'))
+    logger.info(f"\nMeilleure technique: {best_technique.upper()}")
 
 
-def print_completion_message(total_time: float, mlflow_ui_url: str = "http://localhost:5001") -> None:
+def print_completion_message(
+    total_time: float,
+    mlflow_ui_url: str = "http://localhost:5001",
+    logger: Optional[OutputLogger] = None
+) -> None:
     """
     Affiche le message de fin d'entraînement.
 
     Args:
         total_time: Temps total d'exécution en secondes
         mlflow_ui_url: URL de l'interface MLflow
+        logger: Logger pour affichage (optionnel, par défaut PrintLogger)
     """
-    print(f"\n{'=' * 60}")
-    print("ENTRAÎNEMENT TERMINÉ")
-    print(f"{'=' * 60}")
-    print(f"Temps total: {total_time:.1f}s ({total_time/60:.1f} min)")
-    print(f"MLflow UI: {mlflow_ui_url}")
+    if logger is None:
+        logger = _default_output_logger
+
+    logger.info(f"\n{'=' * 60}")
+    logger.info("ENTRAÎNEMENT TERMINÉ")
+    logger.info(f"{'=' * 60}")
+    logger.info(f"Temps total: {total_time:.1f}s ({total_time/60:.1f} min)")
+    logger.info(f"MLflow UI: {mlflow_ui_url}")

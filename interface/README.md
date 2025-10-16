@@ -112,7 +112,7 @@ interface/
 
 ### Erreur de modèle non chargé
 
-1. Déployez un modèle : `python deploy_best_model.py`
+1. Déployez un modèle : `python deploy_model.py`
 2. Vérifiez que le dossier `models/production/` contient le modèle
 3. Redémarrez l'API
 

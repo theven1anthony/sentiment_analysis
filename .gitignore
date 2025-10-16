@@ -44,9 +44,11 @@ wheels/
 /mlruns_backup_20251007_061200/
 /mlartifacts/
 
-# Modèles entraînés (ignorer tout le contenu sauf structure)
+# Modèles entraînés (ignorer sauf production)
 /models/*
 !/models/.gitkeep
+!/models/production/
+/models/production/.gitkeep
 
 # Données (garder structure, pas les fichiers)
 /data/*.csv

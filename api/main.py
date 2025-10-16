@@ -28,6 +28,14 @@ from api.models import (
     ModelInfoResponse
 )
 
+# Import monitoring Azure (optionnel si connection string non configurée)
+try:
+    from monitoring.azure_monitor_integration import azure_monitor
+    AZURE_MONITOR_ENABLED = True
+except ImportError:
+    AZURE_MONITOR_ENABLED = False
+    azure_monitor = None
+
 # Configuration
 MODEL_URI_PATH = os.getenv("MODEL_URI_PATH", "./models/production/model_uri.txt")
 MODEL_METADATA_PATH = os.getenv("MODEL_METADATA_PATH", "./models/production/metadata.pkl")
@@ -216,11 +224,31 @@ async def feedback(request: FeedbackRequest):
             # Ajouter l'erreur à la queue
             misclassified_queue.append(datetime.now())
 
+            # Logger la misclassification dans Azure Monitor
+            if AZURE_MONITOR_ENABLED and azure_monitor:
+                azure_monitor.log_misclassification(
+                    text=request.text,
+                    predicted_sentiment=request.predicted_sentiment,
+                    actual_sentiment=request.actual_sentiment,
+                    confidence=getattr(request, 'confidence', 0.0)
+                )
+
             # Vérifier le seuil d'alerte
             if len(misclassified_queue) >= ALERT_THRESHOLD:
                 alert_triggered = True
 
-                # TODO: Intégration Azure Monitor / Action Groups pour envoyer l'alerte
+                # Logger l'alerte dans Azure Monitor
+                if AZURE_MONITOR_ENABLED and azure_monitor:
+                    azure_monitor.log_alert_triggered(
+                        alert_type="high_misclassification_rate",
+                        details={
+                            "misclassified_count": len(misclassified_queue),
+                            "window_minutes": ALERT_WINDOW_MINUTES,
+                            "threshold": ALERT_THRESHOLD,
+                            "latest_text_preview": request.text[:100]
+                        }
+                    )
+
                 print(f"⚠️  ALERTE: {len(misclassified_queue)} erreurs en {ALERT_WINDOW_MINUTES} minutes")
                 print(f"   Texte: {request.text[:50]}...")
                 print(f"   Prédit: {request.predicted_sentiment}, Réel: {request.actual_sentiment}")

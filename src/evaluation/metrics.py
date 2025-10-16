@@ -4,7 +4,7 @@ Calcule et compare les métriques de performance des différents modèles.
 Répond aux critères d'évaluation CE1-CE6 pour l'évaluation des performances.
 """
 
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Protocol, Optional
 import pandas as pd
 import numpy as np
 from sklearn.metrics import (
@@ -14,6 +14,60 @@ from sklearn.metrics import (
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
+
+
+# Protocoles pour injection de dépendances
+class MLflowLoggerProtocol(Protocol):
+    """Protocole pour logger MLflow."""
+
+    def log_metric(self, key: str, value: float, step: Optional[int] = None) -> None:
+        """Log une métrique MLflow."""
+        ...
+
+    def log_artifact(self, local_path: str, artifact_path: Optional[str] = None) -> None:
+        """Log un artifact MLflow."""
+        ...
+
+
+class PlotBackendProtocol(Protocol):
+    """Protocole pour backend de visualisation."""
+
+    def show(self) -> None:
+        """Affiche le graphique."""
+        ...
+
+    def savefig(self, path: str, **kwargs) -> None:
+        """Sauvegarde le graphique."""
+        ...
+
+    def close(self) -> None:
+        """Ferme le graphique."""
+        ...
+
+
+class DefaultMLflowLogger:
+    """Logger MLflow par défaut."""
+
+    def log_metric(self, key: str, value: float, step: Optional[int] = None) -> None:
+        import mlflow
+        mlflow.log_metric(key, value, step=step)
+
+    def log_artifact(self, local_path: str, artifact_path: Optional[str] = None) -> None:
+        import mlflow
+        mlflow.log_artifact(local_path, artifact_path)
+
+
+class DefaultPlotBackend:
+    """Backend matplotlib par défaut."""
+
+    def show(self) -> None:
+        plt.show()
+
+    def savefig(self, path: str, **kwargs) -> None:
+        plt.savefig(path, **kwargs)
+
+    def close(self) -> None:
+        plt.close()
 
 
 class ModelEvaluator:
@@ -326,22 +380,31 @@ def create_data_splits(df: pd.DataFrame, test_size: float = 0.2,
     return X_train, X_val, X_test, y_train, y_val, y_test
 
 
-def log_training_history(history: Dict[str, list], model_name: str = "model") -> None:
+def log_training_history(
+    history: Dict[str, list],
+    model_name: str = "model",
+    mlflow_logger: Optional[MLflowLoggerProtocol] = None,
+    plot_backend: Optional[PlotBackendProtocol] = None
+) -> None:
     """
     Log les métriques d'entraînement Keras dans MLflow avec graphiques.
 
     Args:
         history: Dictionnaire history.history de Keras
         model_name: Nom du modèle pour les graphiques
+        mlflow_logger: Logger MLflow (optionnel, par défaut DefaultMLflowLogger)
+        plot_backend: Backend pour visualisation (optionnel, par défaut DefaultPlotBackend)
     """
-    import mlflow
     import tempfile
     import os
 
+    if mlflow_logger is None:
+        mlflow_logger = DefaultMLflowLogger()
+    if plot_backend is None:
+        plot_backend = DefaultPlotBackend()
+
     # 1. Logger les métriques epoch par epoch
     for epoch in range(len(history['loss'])):
-        metrics_to_log = {}
-
         for metric_name, values in history.items():
             if epoch < len(values):
                 # Renommer pour MLflow : 'loss' -> 'train_loss', 'val_loss' -> 'val_loss'
@@ -350,7 +413,7 @@ def log_training_history(history: Dict[str, list], model_name: str = "model") ->
                 else:
                     mlflow_name = f'train_{metric_name}'
 
-                mlflow.log_metric(mlflow_name, values[epoch], step=epoch)
+                mlflow_logger.log_metric(mlflow_name, values[epoch], step=epoch)
 
     # 2. Créer les graphiques train vs val
     metrics_pairs = []
@@ -391,8 +454,8 @@ def log_training_history(history: Dict[str, list], model_name: str = "model") ->
 
         # Sauvegarder et logger dans MLflow
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-            plt.savefig(tmp_file.name, dpi=150, bbox_inches='tight')
-            plt.close()
+            plot_backend.savefig(tmp_file.name, dpi=150, bbox_inches='tight')
+            plot_backend.close()
 
-            mlflow.log_artifact(tmp_file.name, "training_curves")
+            mlflow_logger.log_artifact(tmp_file.name, "training_curves")
             os.unlink(tmp_file.name)

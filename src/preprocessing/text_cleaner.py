@@ -1,6 +1,6 @@
 import re
 import string
-from typing import List
+from typing import List, Protocol, Optional, Set, Callable
 import pandas as pd
 import nltk
 from nltk.corpus import stopwords
@@ -24,22 +24,72 @@ except LookupError:
     nltk.download('wordnet')
 
 
+# Protocoles pour injection de dépendances
+class StemmerProtocol(Protocol):
+    """Protocole pour un stemmer."""
+
+    def stem(self, word: str) -> str:
+        """Applique le stemming à un mot."""
+        ...
+
+
+class LemmatizerProtocol(Protocol):
+    """Protocole pour un lemmatizer."""
+
+    def lemmatize(self, word: str) -> str:
+        """Applique la lemmatization à un mot."""
+        ...
+
+
+class TokenizerProtocol(Protocol):
+    """Protocole pour un tokenizer."""
+
+    def __call__(self, text: str) -> List[str]:
+        """Tokenise un texte."""
+        ...
+
+
+class OutputLogger(Protocol):
+    """Protocole pour logger de sortie."""
+
+    def info(self, message: str) -> None:
+        """Log un message d'information."""
+        ...
+
+
+class PrintLogger:
+    """Logger par défaut qui utilise print()."""
+
+    def info(self, message: str) -> None:
+        print(message)
+
+
 class TextCleaner:
     """Nettoyage et preprocessing des tweets pour l'analyse de sentiment."""
 
-    def __init__(self, remove_urls: bool = True, remove_mentions: bool = True,
-                 remove_hashtags: bool = False, lowercase: bool = True,
-                 language: str = 'english'):
+    def __init__(
+        self,
+        remove_urls: bool = True,
+        remove_mentions: bool = True,
+        remove_hashtags: bool = False,
+        lowercase: bool = True,
+        language: str = 'english',
+        stemmer: Optional[StemmerProtocol] = None,
+        lemmatizer: Optional[LemmatizerProtocol] = None,
+        stop_words: Optional[Set[str]] = None,
+        tokenizer: Optional[TokenizerProtocol] = None
+    ):
         self.remove_urls = remove_urls
         self.remove_mentions = remove_mentions
         self.remove_hashtags = remove_hashtags
         self.lowercase = lowercase
         self.language = language
 
-        # Initialisation des outils de prétraitement avancé
-        self.stemmer = SnowballStemmer(language)
-        self.lemmatizer = WordNetLemmatizer()
-        self.stop_words = set(stopwords.words(language))
+        # Initialisation des outils de prétraitement avancé avec injection
+        self.stemmer = stemmer if stemmer is not None else SnowballStemmer(language)
+        self.lemmatizer = lemmatizer if lemmatizer is not None else WordNetLemmatizer()
+        self.stop_words = stop_words if stop_words is not None else set(stopwords.words(language))
+        self.tokenizer = tokenizer if tokenizer is not None else word_tokenize
 
     def clean_tweet(self, text: str) -> str:
         """Nettoie un tweet individuel."""
@@ -128,11 +178,14 @@ class TextCleaner:
         for token in tokens:
             token_lower = token.lower()
 
+            # Vérifier si le token se termine par une ponctuation de fin de phrase
+            ends_with_sentence_punct = len(token) > 0 and token[-1] in '.!?;,'
+
             if token_lower in negations:
                 negate = True
                 words_negated = 0
                 result.append(token)
-            elif token in ['.', '!', '?', ',', ';']:  # Reset à la ponctuation
+            elif token in ['.', '!', '?', ',', ';']:  # Ponctuation seule
                 negate = False
                 words_negated = 0
                 result.append(token)
@@ -144,13 +197,18 @@ class TextCleaner:
                 result.append(f"NOT_{token}")
                 words_negated += 1
 
+                # Reset si le mot se termine par une ponctuation de fin de phrase
+                if ends_with_sentence_punct:
+                    negate = False
+                    words_negated = 0
                 # Limite la portée: max 3 mots sauf intensifieurs
-                if words_negated >= 3 and token_lower not in intensifiers:
+                elif words_negated >= 3 and token_lower not in intensifiers:
                     negate = False
                     words_negated = 0
             else:
                 result.append(token)
-                if not token_lower in intensifiers:  # Reset sauf pour intensifieurs
+                # Reset si le mot se termine par une ponctuation
+                if ends_with_sentence_punct or not token_lower in intensifiers:
                     negate = False
                     words_negated = 0
 
@@ -189,18 +247,18 @@ class TextCleaner:
         if handle_emotions:
             text = self.handle_emotions(text)
 
-        # 3. Nettoyage de base
+        # 3. Gestion des négations (AVANT le nettoyage pour garder la ponctuation)
+        if handle_negations:
+            text = self.handle_negations(text)
+
+        # 4. Nettoyage de base (supprime la ponctuation)
         cleaned_text = self.clean_tweet(text)
 
         if not cleaned_text:
             return ""
 
-        # 4. Gestion des négations (APRÈS le nettoyage, AVANT la tokenisation)
-        if handle_negations:
-            cleaned_text = self.handle_negations(cleaned_text)
-
         # 5. Tokenisation
-        tokens = word_tokenize(cleaned_text)
+        tokens = self.tokenizer(cleaned_text)
 
         # 6. Suppression sélective des stopwords (garder les mots sentiments)
         if remove_stopwords:
@@ -243,15 +301,27 @@ class TextCleaner:
             return [self.clean_tweet(text) for text in texts]
 
 
-def load_sentiment140_data(file_path: str, sample_size: int = None) -> pd.DataFrame:
+def load_sentiment140_data(
+    file_path: str,
+    sample_size: Optional[int] = None,
+    logger: Optional[OutputLogger] = None
+) -> pd.DataFrame:
     """
     Charge le dataset Sentiment140 avec échantillonnage stratifié.
     Maintient la répartition équilibrée des classes (50% négatif, 50% positif).
+
+    Args:
+        file_path: Chemin vers le fichier CSV
+        sample_size: Taille de l'échantillon (None = dataset complet)
+        logger: Logger pour affichage (optionnel, par défaut PrintLogger)
     """
+    if logger is None:
+        logger = PrintLogger()
+
     columns = ['sentiment', 'id', 'date', 'query', 'user', 'text']
 
     # Charger le dataset complet
-    print(f"   Chargement du dataset complet...")
+    logger.info(f"   Chargement du dataset complet...")
     df = pd.read_csv(file_path, names=columns, encoding='latin1')
 
     # Conversion des labels (0->0, 4->1)
@@ -260,14 +330,14 @@ def load_sentiment140_data(file_path: str, sample_size: int = None) -> pd.DataFr
     # Sélectionner seulement les colonnes nécessaires
     df = df[['text', 'sentiment']]
 
-    print(f"   Dataset complet chargé: {len(df)} tweets")
-    print(f"   Distribution originale: {df['sentiment'].value_counts().to_dict()}")
+    logger.info(f"   Dataset complet chargé: {len(df)} tweets")
+    logger.info(f"   Distribution originale: {df['sentiment'].value_counts().to_dict()}")
 
     # Échantillonnage stratifié si demandé
     if sample_size and sample_size < len(df):
         from sklearn.model_selection import train_test_split
 
-        print(f"   Échantillonnage stratifié de {sample_size} tweets...")
+        logger.info(f"   Échantillonnage stratifié de {sample_size} tweets...")
 
         # Échantillonnage stratifié pour maintenir la répartition 50/50
         df_sample, _ = train_test_split(
@@ -277,8 +347,8 @@ def load_sentiment140_data(file_path: str, sample_size: int = None) -> pd.DataFr
             stratify=df['sentiment']
         )
 
-        print(f"   Échantillon stratifié créé: {len(df_sample)} tweets")
-        print(f"   Distribution échantillon: {df_sample['sentiment'].value_counts().to_dict()}")
+        logger.info(f"   Échantillon stratifié créé: {len(df_sample)} tweets")
+        logger.info(f"   Distribution échantillon: {df_sample['sentiment'].value_counts().to_dict()}")
 
         return df_sample
 

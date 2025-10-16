@@ -10,6 +10,7 @@ services:
       - ./models:/app/models
       - ./mlruns:/app/mlruns
       - ./reports:/app/reports
+      - ./tests:/app/tests
       # Scripts d'entraînement
       - ./train_simple_model.py:/app/train_simple_model.py
       - ./train_word2vec_model.py:/app/train_word2vec_model.py
@@ -17,7 +18,7 @@ services:
       - ./train_glove_model.py:/app/train_glove_model.py
       - ./train_use_model.py:/app/train_use_model.py
       - ./train_bert_model.py:/app/train_bert_model.py
-      - ./deploy_best_model.py:/app/deploy_best_model.py
+      - ./deploy_model.py:/app/deploy_model.py
       - ./optimize_hyperparameters.py:/app/optimize_hyperparameters.py
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5001

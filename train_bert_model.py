@@ -17,7 +17,6 @@ import sys
 import pandas as pd
 import mlflow
 import click
-from datetime import datetime
 import time
 import logging
 
@@ -28,6 +27,22 @@ from preprocessing.text_cleaner import TextCleaner, load_sentiment140_data
 from embeddings.bert_embedding import BERTEmbedding
 from evaluation.metrics import ModelEvaluator
 from sklearn.model_selection import train_test_split
+
+# Import des utilitaires mutualisés (partiel pour BERT)
+from utils.train_utils import (
+    select_techniques_to_run,
+    filter_metrics_for_mlflow,
+    log_common_mlflow_info,
+    create_comparison_dataframe,
+    find_best_technique,
+    generate_comparison_report,
+    save_report,
+    log_summary_run,
+    print_training_header,
+    print_results_summary,
+    print_comparison,
+    print_completion_message
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -212,15 +227,7 @@ def main(technique, description, experiment_name, sample_size, max_length, batch
 
         # 3. Entraînement
         print(f"\nEtape 3/4 - Entraînement (technique={technique})...")
-
-        techniques_to_run = []
-        if technique == 'both':
-            techniques_to_run = [('stemming', 'text_stemmed'), ('lemmatization', 'text_lemmatized')]
-        elif technique == 'stemming':
-            techniques_to_run = [('stemming', 'text_stemmed')]
-        else:
-            techniques_to_run = [('lemmatization', 'text_lemmatized')]
-
+        techniques_to_run = select_techniques_to_run(technique)
         results = {}
 
         for technique_name, text_column in techniques_to_run:
@@ -255,21 +262,18 @@ def main(technique, description, experiment_name, sample_size, max_length, batch
                     'architecture': 'BERT Transformer'
                 })
 
-                # Log métriques (sans confusion_matrix et classification_report)
-                metrics_to_log = {k: v for k, v in metrics.items()
-                                 if k not in ['confusion_matrix', 'classification_report', 'model_name']}
-                mlflow.log_metrics(metrics_to_log)
+                # Log métriques
+                mlflow.log_metrics(filter_metrics_for_mlflow(metrics))
 
                 # Tags
-                if description:
-                    mlflow.set_tag("description", description)
-                mlflow.set_tag("model_type", "bert_transformer")
+                log_common_mlflow_info(description, "bert_transformer")
 
                 results[technique_name] = {
                     'model': bert,
                     'metrics': metrics
                 }
 
+                # Afficher résultats (temps en min pour BERT)
                 print(f"\nRésultats {technique_name}:")
                 print(f"  Accuracy: {metrics['accuracy']:.4f}")
                 print(f"  F1-Score: {metrics['f1_score']:.4f}")
@@ -279,7 +283,7 @@ def main(technique, description, experiment_name, sample_size, max_length, batch
         # 4. Comparaison et rapport
         print("\nEtape 4/4 - Génération du rapport...")
 
-        # Tableau comparatif
+        # Créer tableau comparatif avec temps en minutes pour BERT
         comparison_data = []
         for tech_name, res in results.items():
             m = res['metrics']
@@ -290,97 +294,66 @@ def main(technique, description, experiment_name, sample_size, max_length, batch
                 'AUC': m.get('auc_score', 0),
                 'Time (min)': m['training_time'] / 60
             })
-
         df_comparison = pd.DataFrame(comparison_data)
 
         if len(results) > 1:
+            # Afficher comparaison
+            best_technique, best_metrics = find_best_technique(results)
             print("\nCOMPARAISON:")
             print(df_comparison.to_string(index=False, float_format='%.4f'))
-
-            best_technique = max(results.keys(),
-                               key=lambda k: results[k]['metrics']['f1_score'])
             print(f"\nMeilleure technique: {best_technique.upper()}")
 
-            best_metrics = results[best_technique]['metrics']
-
-            # Créer une run summary pour MLflow
-            with mlflow.start_run(run_name="bert_summary"):
-                mlflow.set_tag("summary_type", "final_report")
-                if description:
-                    mlflow.set_tag("description", description)
-
-                # Log paramètres
-                mlflow.log_params({
-                    'technique_used': technique,
-                    'best_technique': best_technique,
+            # Créer run summary MLflow
+            log_summary_run(
+                run_name="bert_summary",
+                technique_used=technique,
+                best_technique=best_technique,
+                best_metrics=best_metrics,
+                total_samples=len(df_processed),
+                techniques_tested=len(results),
+                additional_params={
                     'model_name': 'bert-base-uncased',
-                    'total_samples': len(df_processed),
-                    'techniques_tested': len(results),
                     'max_length': max_length,
                     'batch_size': batch_size,
-                    'epochs': epochs
-                })
+                    'epochs': epochs,
+                    'learning_rate': learning_rate
+                },
+                description=description
+            )
 
-                # Log métriques du meilleur modèle
-                summary_metrics = {
-                    'best_accuracy': best_metrics['accuracy'],
-                    'best_f1_score': best_metrics['f1_score'],
-                    'best_precision': best_metrics['precision'],
-                    'best_recall': best_metrics['recall']
-                }
-                if 'auc_score' in best_metrics:
-                    summary_metrics['best_auc_score'] = best_metrics['auc_score']
+            # Générer et sauvegarder rapport
+            report = generate_comparison_report(
+                model_name="BERT FINE-TUNING",
+                architecture="BERT-base-uncased Transformer (110M paramètres)",
+                df_comparison=df_comparison,
+                best_technique=best_technique,
+                best_metrics=best_metrics,
+                dataset_size=len(df_processed),
+                additional_config={
+                    "Méthode": "Fine-tuning sur classification binaire",
+                    "Max length": f"{max_length} tokens",
+                    "Batch size": batch_size,
+                    "Epochs": epochs,
+                    "Learning rate": learning_rate
+                },
+                advantages="- Modèle transformer state-of-the-art pré-entraîné\n- Capture contexte bidirectionnel complet\n- Fine-tuning adapte le modèle à la tâche spécifique",
+                conclusion="Ce modèle utilise BERT fine-tuné et servira de référence state-of-the-art pour comparer avec les autres approches (TF-IDF, Word2Vec, FastText, USE)."
+            )
 
-                mlflow.log_metrics(summary_metrics)
+            report_path = save_report(report, "bert")
 
-                # Sauvegarder le rapport
-                report = f"""RAPPORT DE COMPARAISON - BERT FINE-TUNING
-
-OBJECTIF:
-Comparer les techniques de prétraitement pour le modèle BERT
-
-CONFIGURATION:
-- Modèle: BERT-base-uncased (110M paramètres)
-- Méthode: Fine-tuning sur classification binaire
-- Dataset: {len(df_processed)} échantillons
-- Max length: {max_length} tokens
-- Batch size: {batch_size}
-- Epochs: {epochs}
-- Learning rate: {learning_rate}
-
-AVANTAGE BERT:
-- Modèle transformer state-of-the-art pré-entraîné
-- Capture contexte bidirectionnel complet
-- Fine-tuning adapte le modèle à la tâche spécifique
-
-RÉSULTATS COMPARATIFS:
-{df_comparison.to_string(index=False, float_format='%.4f')}
-
-MODÈLE RETENU: {best_technique.capitalize()}
-- Accuracy: {best_metrics['accuracy']:.4f}
-- F1-Score: {best_metrics['f1_score']:.4f}
-- Précision: {best_metrics['precision']:.4f}
-- Rappel: {best_metrics['recall']:.4f}
-- Temps d'entraînement: {best_metrics['training_time']:.2f}s ({best_metrics['training_time']/60:.1f} min)
-
-CONCLUSION:
-Ce modèle utilise BERT fine-tuné et servira de référence state-of-the-art pour comparer avec les autres approches (TF-IDF, Word2Vec, FastText, USE).
-"""
-
-                report_path = f"reports/bert_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-                os.makedirs(os.path.dirname(report_path), exist_ok=True)
-                with open(report_path, 'w', encoding='utf-8') as f:
-                    f.write(report)
-
+            # Logger le rapport dans MLflow
+            with mlflow.start_run(run_name="bert_summary", nested=True):
                 mlflow.log_artifact(report_path, "reports")
 
-                print(f"\nRapport sauvegardé: {report_path}")
+            print(f"\nRapport sauvegardé: {report_path}")
 
         else:
-            # Une seule technique - log quand même
+            # Une seule technique
             technique_name = list(results.keys())[0]
             best_metrics = results[technique_name]['metrics']
 
+        # Message de fin avec temps en minutes pour BERT
         total_time = time.time() - start_time
         print(f"\n=== BENCHMARK TERMINÉ ===")
         print(f"Temps total: {total_time:.1f}s ({total_time/60:.1f} min)")

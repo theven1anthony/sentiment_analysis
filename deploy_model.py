@@ -15,6 +15,10 @@ from datetime import datetime
 # Ajouter src au PYTHONPATH pour permettre l'import des modules custom
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
+# Configuration MLflow
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001")
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+
 # Configuration
 PRODUCTION_DIR = "./models/production"
 STAGING_DIR = "./models/staging"
@@ -49,20 +53,26 @@ def deploy_model_from_registry(model_name, model_version=1):
             print(f"✗ Modèle '{model_name}' version {model_version} non trouvé: {e}")
             return False
 
-        # 2. Récupérer les métriques et paramètres du run
-        run = mlflow.get_run(run_id)
-        metrics = run.data.metrics
-        params = run.data.params
+        # 2. Récupérer les métriques et paramètres du run (optionnel)
+        try:
+            run = mlflow.get_run(run_id)
+            metrics = run.data.metrics
+            params = run.data.params
 
-        print(f"\nMétriques:")
-        print(f"  F1-Score: {metrics.get('f1_score', 0):.4f}")
-        print(f"  Accuracy: {metrics.get('accuracy', 0):.4f}")
-        print(f"  AUC: {metrics.get('auc_score', 0):.4f}")
+            print(f"\nMétriques:")
+            print(f"  F1-Score: {metrics.get('f1_score', 0):.4f}")
+            print(f"  Accuracy: {metrics.get('accuracy', 0):.4f}")
+            print(f"  AUC: {metrics.get('auc_score', 0):.4f}")
 
-        print(f"\nParamètres:")
-        print(f"  Architecture: {params.get('architecture', 'unknown')}")
-        print(f"  Technique: {params.get('technique', 'unknown')}")
-        print(f"  Vector size: {params.get('vector_size', 'N/A')}")
+            print(f"\nParamètres:")
+            print(f"  Architecture: {params.get('architecture', 'unknown')}")
+            print(f"  Technique: {params.get('technique', 'unknown')}")
+            print(f"  Vector size: {params.get('vector_size', 'N/A')}")
+        except Exception as e:
+            print(f"\n⚠ Impossible de récupérer les métriques/paramètres: {e}")
+            print(f"  Le déploiement continuera quand même...")
+            metrics = {}
+            params = {}
 
         # 3. Charger le modèle pyfunc
         model_uri = f"models:/{model_name}/{model_version}"
@@ -71,15 +81,31 @@ def deploy_model_from_registry(model_name, model_version=1):
         model = mlflow.pyfunc.load_model(model_uri)
         print(f"✓ Modèle pyfunc chargé (pipeline complet)")
 
-        # 4. Créer le dossier production
-        os.makedirs(PRODUCTION_DIR, exist_ok=True)
+        # 4. Créer/nettoyer le dossier production
+        import shutil
+        if os.path.exists(PRODUCTION_DIR):
+            # Garder .gitkeep si présent
+            gitkeep_path = os.path.join(PRODUCTION_DIR, ".gitkeep")
+            has_gitkeep = os.path.exists(gitkeep_path)
 
-        # 5. Sauvegarder l'URI du modèle pour l'API
-        model_uri_file = os.path.join(PRODUCTION_DIR, "model_uri.txt")
-        with open(model_uri_file, 'w') as f:
-            f.write(model_uri)
-        print(f"\n✓ URI du modèle sauvegardé: {model_uri_file}")
-        print(f"  URI: {model_uri}")
+            print(f"\nNettoyage du dossier: {PRODUCTION_DIR}")
+            shutil.rmtree(PRODUCTION_DIR)
+            os.makedirs(PRODUCTION_DIR, exist_ok=True)
+
+            if has_gitkeep:
+                open(gitkeep_path, 'a').close()
+        else:
+            os.makedirs(PRODUCTION_DIR, exist_ok=True)
+
+        # 5. Télécharger le modèle pyfunc complet depuis MLflow
+        pyfunc_model_path = os.path.join(PRODUCTION_DIR, "pyfunc_model")
+        print(f"\nTéléchargement du modèle complet dans: {pyfunc_model_path}")
+
+        # Télécharger tous les artefacts du modèle
+        artifact_path = f"runs:/{run_id}/model"
+        downloaded_path = mlflow.artifacts.download_artifacts(artifact_path, dst_path=pyfunc_model_path)
+
+        print(f"✓ Modèle pyfunc téléchargé (utilisable sans MLflow)")
 
         # 6. Créer les métadonnées
         metadata = {
@@ -105,11 +131,22 @@ def deploy_model_from_registry(model_name, model_version=1):
             pickle.dump(metadata, f)
         print(f"✓ Métadonnées sauvegardées: {metadata_path}")
 
+        # 7. Afficher la taille totale
+        total_size = sum(
+            os.path.getsize(os.path.join(dirpath, filename))
+            for dirpath, _, filenames in os.walk(PRODUCTION_DIR)
+            for filename in filenames
+        )
+        total_size_mb = total_size / (1024 * 1024)
+
         print(f"\n=== DÉPLOIEMENT TERMINÉ ===")
+        print(f"\nTaille totale: {total_size_mb:.1f} MB")
+        print(f"Emplacement: {os.path.abspath(PRODUCTION_DIR)}")
         print(f"\nProchaines étapes:")
-        print(f"1. Adapter l'API (api/main.py) pour charger le modèle TensorFlow")
-        print(f"2. Vérifier que l'embedding Word2Vec est disponible")
-        print(f"3. Tester: uvicorn api.main:app --reload --host 0.0.0.0 --port 8000")
+        print(f"1. Tester l'API localement: uvicorn api.main:app --reload")
+        print(f"2. Commit sur Git: git add models/production/")
+        print(f"3. Push: git push origin main")
+        print(f"4. GitHub Actions déploiera automatiquement sur AWS")
 
         return True
 

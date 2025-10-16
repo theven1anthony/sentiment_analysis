@@ -11,25 +11,39 @@ Usage:
 
 import os
 import sys
-import pandas as pd
-import numpy as np
 import pickle
 import mlflow
 import mlflow.tensorflow
 import click
-from datetime import datetime
 import time
 import logging
 
 # Ajouter le dossier src au path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from preprocessing.text_cleaner import TextCleaner, load_sentiment140_data
 from embeddings.word2vec_embedding import Word2VecEmbedding
 from utils.model_utils import build_neural_network, get_training_callbacks
 from evaluation.metrics import ModelEvaluator, log_training_history
 from models.word2vec_sentiment_model import Word2VecSentimentModel
-from sklearn.model_selection import train_test_split
+
+# Import des utilitaires mutualisés
+from utils.train_utils import (
+    load_and_preprocess_data,
+    create_train_val_test_splits,
+    select_techniques_to_run,
+    prepare_data_for_training,
+    filter_metrics_for_mlflow,
+    log_common_mlflow_info,
+    create_comparison_dataframe,
+    find_best_technique,
+    generate_comparison_report,
+    save_report,
+    log_summary_run,
+    print_training_header,
+    print_results_summary,
+    print_comparison,
+    print_completion_message
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -151,91 +165,46 @@ def train_word2vec_model(X_train, y_train, X_val, y_val, X_test, y_test,
 def main(technique, description, experiment_name, sample_size, with_lstm, vector_size):
     """Entraîne un modèle Word2Vec avec réseau de neurones."""
 
-    print("=== BENCHMARK WORD2VEC + NEURAL NETWORK ===\n")
-    print(f"Technique: {technique}")
-    print(f"Architecture: {'LSTM' if with_lstm else 'Dense'}")
-    print(f"Sample size: {sample_size}")
-    print(f"Vector size: {vector_size}")
-    print(f"Description: {description}\n")
+    # Header
+    print_training_header(
+        "WORD2VEC + NEURAL NETWORK",
+        technique,
+        description,
+        {
+            "Architecture": 'LSTM' if with_lstm else 'Dense',
+            "Sample size": sample_size,
+            "Vector size": vector_size
+        }
+    )
 
     mlflow.set_experiment(experiment_name)
 
     try:
-        # 1. Chargement des données
-        print("Etape 1/4 - Chargement des données...")
+        # 1. Chargement et prétraitement
+        print("Etape 1/4 - Chargement et prétraitement...")
         start_time = time.time()
 
-        df = load_sentiment140_data(
+        df_processed, _ = load_and_preprocess_data(
             "data/training.1600000.processed.noemoticon.csv",
             sample_size=sample_size
         )
-        print(f"Dataset chargé: {len(df):,} échantillons")
-        print(f"Distribution: {df['sentiment'].value_counts().to_dict()}")
 
-        # 2. Prétraitement
-        print("\nEtape 2/4 - Prétraitement...")
-        cleaner = TextCleaner()
-
-        df_processed = df.copy()
-
-        # Stemming
-        print("  Stemming...")
-        df_processed['text_stemmed'] = cleaner.preprocess_with_techniques(
-            df['text'].tolist(), technique='stemming'
-        )
-        df_processed = df_processed[df_processed['text_stemmed'].str.len() > 0].reset_index(drop=True)
-
-        # Lemmatization
-        print("  Lemmatization...")
-        df_processed['text_lemmatized'] = cleaner.preprocess_with_techniques(
-            df_processed['text'].tolist(), technique='lemmatization'
-        )
-        df_processed = df_processed[df_processed['text_lemmatized'].str.len() > 0].reset_index(drop=True)
-
-        print(f"Textes valides: {len(df_processed):,}")
-
-        # Création des splits
-        print("  Création des splits train/val/test (70/15/15)...")
-        train_idx, temp_idx = train_test_split(
-            range(len(df_processed)), test_size=0.3, random_state=42,
-            stratify=df_processed['sentiment']
-        )
-        val_idx, test_idx = train_test_split(
-            temp_idx, test_size=0.5, random_state=42,
-            stratify=df_processed.iloc[temp_idx]['sentiment']
-        )
-
-        splits_data = {
-            'train_idx': train_idx,
-            'val_idx': val_idx,
-            'test_idx': test_idx
-        }
-
-        print(f"  Train={len(train_idx)}, Val={len(val_idx)}, Test={len(test_idx)}")
+        # 2. Création des splits
+        print("\nEtape 2/4 - Création des splits...")
+        splits_data = create_train_val_test_splits(df_processed)
 
         # 3. Entraînement
         print(f"\nEtape 3/4 - Entraînement (technique={technique})...")
-
-        techniques_to_run = []
-        if technique == 'both':
-            techniques_to_run = [('stemming', 'text_stemmed'), ('lemmatization', 'text_lemmatized')]
-        elif technique == 'stemming':
-            techniques_to_run = [('stemming', 'text_stemmed')]
-        else:
-            techniques_to_run = [('lemmatization', 'text_lemmatized')]
-
+        techniques_to_run = select_techniques_to_run(technique)
         results = {}
 
         for technique_name, text_column in techniques_to_run:
             print(f"\n=== TECHNIQUE: {technique_name.upper()} ===")
 
             # Préparer les données
-            X_train = df_processed.iloc[splits_data['train_idx']][text_column]
-            X_val = df_processed.iloc[splits_data['val_idx']][text_column]
-            X_test = df_processed.iloc[splits_data['test_idx']][text_column]
-            y_train = df_processed.iloc[splits_data['train_idx']]['sentiment'].values
-            y_val = df_processed.iloc[splits_data['val_idx']]['sentiment'].values
-            y_test = df_processed.iloc[splits_data['test_idx']]['sentiment'].values
+            X_train, X_val, X_test, y_train, y_val, y_test = prepare_data_for_training(
+                df_processed, splits_data, text_column
+            )
 
             # Entraîner avec MLflow
             arch_name = 'lstm' if with_lstm else 'dense'
@@ -256,10 +225,8 @@ def main(technique, description, experiment_name, sample_size, with_lstm, vector
                     'vocab_size': metrics['vocab_size']
                 })
 
-                # Log métriques (sans confusion_matrix et classification_report)
-                metrics_to_log = {k: v for k, v in metrics.items()
-                                 if k not in ['confusion_matrix', 'classification_report', 'model_name']}
-                mlflow.log_metrics(metrics_to_log)
+                # Log métriques
+                mlflow.log_metrics(filter_metrics_for_mlflow(metrics))
 
                 # Log courbes d'entraînement
                 log_training_history(history.history, model_name=run_name)
@@ -323,123 +290,78 @@ def main(technique, description, experiment_name, sample_size, with_lstm, vector
                     print(f"✓ Modèle pyfunc MLflow sauvegardé (Keras + Word2Vec + preprocessing)")
 
                 # Tags
-                if description:
-                    mlflow.set_tag("description", description)
-                mlflow.set_tag("model_type", "word2vec_neural")
+                log_common_mlflow_info(description, "word2vec_neural")
 
                 results[technique_name] = {
                     'model': model,
                     'metrics': metrics
                 }
 
-                print(f"\nRésultats {technique_name}:")
-                print(f"  Accuracy: {metrics['accuracy']:.4f}")
-                print(f"  F1-Score: {metrics['f1_score']:.4f}")
-                print(f"  AUC: {metrics.get('auc_score', 0):.4f}")
-                print(f"  Training time: {metrics['training_time']:.1f}s")
-                print(f"  Epochs: {metrics['epochs_trained']}")
-                print(f"  Vocab size: {metrics['vocab_size']}")
+                # Afficher résultats
+                print_results_summary(
+                    technique_name,
+                    metrics,
+                    additional_metrics=['epochs_trained', 'vocab_size']
+                )
 
         # 4. Comparaison et rapport
         print("\nEtape 4/4 - Génération du rapport...")
 
-        # Tableau comparatif
-        comparison_data = []
-        for tech_name, res in results.items():
-            m = res['metrics']
-            comparison_data.append({
-                'Technique': tech_name.capitalize(),
-                'Accuracy': m['accuracy'],
-                'F1-Score': m['f1_score'],
-                'AUC': m.get('auc_score', 0),
-                'Time (s)': m['training_time']
-            })
-
-        df_comparison = pd.DataFrame(comparison_data)
+        # Créer tableau comparatif
+        df_comparison = create_comparison_dataframe(results)
 
         if len(results) > 1:
-            print("\nCOMPARAISON:")
-            print(df_comparison.to_string(index=False, float_format='%.4f'))
+            # Afficher comparaison
+            best_technique, best_metrics = find_best_technique(results)
+            print_comparison(df_comparison, best_technique)
 
-            best_technique = max(results.keys(),
-                               key=lambda k: results[k]['metrics']['f1_score'])
-            print(f"\nMeilleure technique: {best_technique.upper()}")
-
-            best_metrics = results[best_technique]['metrics']
-
-            # Créer une run summary pour MLflow
+            # Créer run summary MLflow
             arch_name = 'lstm' if with_lstm else 'dense'
-            with mlflow.start_run(run_name=f"word2vec_{arch_name}_summary"):
-                mlflow.set_tag("summary_type", "final_report")
-                if description:
-                    mlflow.set_tag("description", description)
-
-                # Log paramètres
-                mlflow.log_params({
-                    'technique_used': technique,
-                    'best_technique': best_technique,
+            log_summary_run(
+                run_name=f"word2vec_{arch_name}_summary",
+                technique_used=technique,
+                best_technique=best_technique,
+                best_metrics=best_metrics,
+                total_samples=len(df_processed),
+                techniques_tested=len(results),
+                additional_params={
                     'architecture': 'LSTM' if with_lstm else 'Dense',
-                    'total_samples': len(df_processed),
-                    'techniques_tested': len(results),
                     'vector_size': vector_size
-                })
+                },
+                description=description
+            )
 
-                # Log métriques du meilleur modèle
-                summary_metrics = {
-                    'best_accuracy': best_metrics['accuracy'],
-                    'best_f1_score': best_metrics['f1_score'],
-                    'best_precision': best_metrics['precision'],
-                    'best_recall': best_metrics['recall']
-                }
-                if 'auc_score' in best_metrics:
-                    summary_metrics['best_auc_score'] = best_metrics['auc_score']
+            # Générer et sauvegarder rapport
+            arch_description = 'Bidirectional LSTM' if with_lstm else 'Dense Neural Network'
+            report = generate_comparison_report(
+                model_name="WORD2VEC + " + ("LSTM" if with_lstm else "DENSE"),
+                architecture=arch_description,
+                df_comparison=df_comparison,
+                best_technique=best_technique,
+                best_metrics=best_metrics,
+                dataset_size=len(df_processed),
+                additional_config={
+                    "Word2Vec": f"Skip-gram, vector_size={vector_size}"
+                },
+                conclusion="Ce modèle utilise Word2Vec pour les embeddings et servira de référence pour comparer avec d'autres techniques d'embedding (FastText, USE, BERT)."
+            )
 
-                mlflow.log_metrics(summary_metrics)
+            report_path = save_report(report, f"word2vec_{arch_name}")
 
-                # Sauvegarder le rapport
-                report = f"""RAPPORT DE COMPARAISON - WORD2VEC + {'LSTM' if with_lstm else 'DENSE'}
-
-OBJECTIF:
-Comparer les techniques de prétraitement pour le modèle Word2Vec
-
-CONFIGURATION:
-- Architecture: {'Bidirectional LSTM' if with_lstm else 'Dense Neural Network'}
-- Word2Vec: Skip-gram, vector_size={vector_size}
-- Dataset: {len(df_processed)} échantillons
-
-RÉSULTATS COMPARATIFS:
-{df_comparison.to_string(index=False, float_format='%.4f')}
-
-MODÈLE RETENU: {best_technique.capitalize()}
-- Accuracy: {best_metrics['accuracy']:.4f}
-- F1-Score: {best_metrics['f1_score']:.4f}
-- Précision: {best_metrics['precision']:.4f}
-- Rappel: {best_metrics['recall']:.4f}
-- Temps d'entraînement: {best_metrics['training_time']:.2f}s
-- Epochs entraînés: {best_metrics['epochs_trained']}
-
-CONCLUSION:
-Ce modèle utilise Word2Vec pour les embeddings et servira de référence pour comparer avec d'autres techniques d'embedding (FastText, USE, BERT).
-"""
-
-                report_path = f"reports/word2vec_{arch_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-                os.makedirs(os.path.dirname(report_path), exist_ok=True)
-                with open(report_path, 'w', encoding='utf-8') as f:
-                    f.write(report)
-
+            # Logger le rapport dans MLflow
+            with mlflow.start_run(run_name=f"word2vec_{arch_name}_summary", nested=True):
                 mlflow.log_artifact(report_path, "reports")
 
-                print(f"\nRapport sauvegardé: {report_path}")
+            print(f"\nRapport sauvegardé: {report_path}")
 
         else:
-            # Une seule technique - log quand même
+            # Une seule technique
             technique_name = list(results.keys())[0]
             best_metrics = results[technique_name]['metrics']
 
+        # Message de fin
         total_time = time.time() - start_time
-        print(f"\n=== BENCHMARK TERMINÉ ===")
-        print(f"Temps total: {total_time:.1f}s ({total_time/60:.1f} min)")
-        print(f"MLflow UI: http://localhost:5001")
+        print_completion_message(total_time)
 
     except Exception as e:
         print(f"\nErreur: {str(e)}")

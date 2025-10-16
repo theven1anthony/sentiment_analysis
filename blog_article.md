@@ -14,8 +14,8 @@
 3. [Phase 1 : Benchmark Initial sur 50 000 Tweets](#phase-1-benchmark-initial-sur-50-000-tweets)
 4. [Phase 2 : Diagnostic et Augmentation Progressive des Données](#phase-2-diagnostic-et-augmentation-progressive-des-données)
 5. [Phase 3 : Optimisation et Choix du Modèle de Production](#phase-3-optimisation-et-choix-du-modèle-de-production)
-6. [TODO : Optimisation des Hyperparamètres](#todo-optimisation-des-hyperparamètres)
-7. [TODO : Pipeline MLOps et Déploiement](#todo-pipeline-mlops-et-déploiement)
+6. [Optimisation des Hyperparamètres](#optimisation-des-hyperparamètres)
+7. [Pipeline MLOps et Déploiement](#pipeline-mlops-et-déploiement)
 8. [TODO : Monitoring en Production](#todo-monitoring-en-production)
 9. [Conclusion](#conclusion)
 
@@ -500,10 +500,9 @@ L'optimisation génère un rapport CSV classant les 20 configurations par F1-Sco
 
 ---
 
-## TODO : Pipeline MLOps et Déploiement
+## Pipeline MLOps et Déploiement
 
-**Statut** : Partiellement réalisé (MLflow tracking OK, déploiement AWS manquant)
-**Priorité** : Haute
+**Statut** : Implémenté (en attente de validation compte AWS pour déploiement production)
 **Objectif** : Pipeline complet d'entraînement → déploiement → monitoring
 
 ### 1. Pipeline d'entraînement reproductible
@@ -572,33 +571,36 @@ L'optimisation génère un rapport CSV classant les 20 configurations par F1-Sco
 
 ### 5. Déploiement AWS
 
-**Infrastructure proposée :**
+**Statut** : Pipeline CI/CD implémenté, en attente de compte AWS
 
-**Option 1 : AWS Lambda + API Gateway (recommandé free-tier)**
-- Serverless : Pas de serveur à maintenir
-- Auto-scaling : Gère pics de charge
-- Coût : Pay-per-request (~gratuit sous 1M req/mois)
-- Limites : Timeout 15min, 512MB RAM
+**Configuration retenue** : AWS Elastic Beanstalk avec Docker
 
-**Option 2 : AWS EC2 t2.micro (alternative)**
-- Instance gratuite 1 an (750h/mois)
-- Docker Compose : API + MLflow
-- Reverse proxy : Nginx
-- Limites : 1GB RAM (tight pour modèle)
+**Implémentation effectuée :**
+- Script `deploy_model.py` : Télécharge modèle complet depuis MLflow Model Registry
+- Modèle packagé (20.5 MB) : Stocké dans Git pour déploiement simplifié
+- Dockerfile : Conteneurise l'API FastAPI avec toutes dépendances
+- GitHub Actions CI : Tests automatisés (pytest, black, flake8, build Docker)
+- GitHub Actions CD : Déploiement automatique sur AWS Elastic Beanstalk
+- Documentation complète : `docs/deployment_aws.md` et `docs/cicd_pipeline.md`
+- Configuration AWS : `.ebextensions/` pour CloudWatch et environnement
 
-**Configuration retenue** : Lambda (meilleur fit free-tier + scalabilité)
+**Pipeline de déploiement :**
+1. Push sur `main` → Déclenchement CI (tests + build)
+2. Si tests passent → Création package déploiement
+3. Upload vers S3 → Déploiement sur Elastic Beanstalk
+4. Health check automatique → Validation du déploiement
 
-**Steps déploiement :**
-1. Conteneuriser modèle (Docker)
-2. Push image vers ECR (Elastic Container Registry)
-3. Créer fonction Lambda depuis image ECR
-4. Configurer API Gateway (endpoint HTTPS)
-5. Tests smoke : 100 requêtes de validation
+**Avantages Elastic Beanstalk vs Lambda :**
+- Free-tier : 750h/mois t2.micro (12 mois gratuit)
+- Docker natif : Déploiement standard sans adaptation
+- Monitoring CloudWatch intégré
+- Rollback facile vers versions précédentes
 
-**Livrable** :
-- URL API publique : `https://api-sentiment.airparadis.com/predict`
-- Documentation Swagger : `/docs`
-- SLA : 99.9% uptime (géré par Lambda)
+**Infrastructure AWS (free-tier) :**
+- EC2 t2.micro : Instance pour l'API
+- S3 : Stockage des packages de déploiement
+- CloudWatch : Logs et monitoring
+- SNS : Alertes email/SMS (3 erreurs en 5 minutes)
 
 ---
 

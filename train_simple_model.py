@@ -25,6 +25,15 @@ from models.simple_model import train_simple_model
 # from models.mlflow_utils import train_and_register_model, ModelManager  # TEMPORAIRE : commenté pour debug
 from evaluation.metrics import ModelEvaluator, create_data_splits
 
+# Import des utilitaires mutualisés
+from utils.train_utils import (
+    select_techniques_to_run,
+    find_best_technique,
+    generate_comparison_report,
+    save_report,
+    log_summary_run
+)
+
 
 def create_training_function(technique_name, text_column, df_processed, splits_data):
     """
@@ -175,16 +184,9 @@ def main(technique, description, experiment_name, sample_size, handle_negations,
         training_start = time.time()
 
         techniques_results = {}
-        total_techniques = 2 if technique == 'both' else 1
+        techniques_to_run = select_techniques_to_run(technique)
+        total_techniques = len(techniques_to_run)
         current_technique = 0
-
-        # Déterminer les techniques à exécuter
-        if technique == 'both':
-            techniques_to_run = [('stemming', 'text_stemmed'), ('lemmatization', 'text_lemmatized')]
-        elif technique == 'stemming':
-            techniques_to_run = [('stemming', 'text_stemmed')]
-        else:  # lemmatization
-            techniques_to_run = [('lemmatization', 'text_lemmatized')]
 
         # Entraîner les modèles avec MLflow standard
         for technique_name, text_column in techniques_to_run:
@@ -295,10 +297,12 @@ def main(technique, description, experiment_name, sample_size, handle_negations,
             eval_time = time.time() - eval_start
             technique_total_time = time.time() - technique_start
 
+            # Ajouter training_time aux métriques pour cohérence avec autres scripts
+            eval_metrics['training_time'] = metrics['training_time']
+
             techniques_results[technique_name] = {
                 'model': model,
-                'eval_metrics': eval_metrics,
-                'training_time': metrics['training_time']  # Conserver le temps d'entraînement
+                'metrics': eval_metrics  # Renommé pour cohérence avec train_utils
             }
 
             print(f"   RESULTATS {technique_name.upper()}:")
@@ -317,42 +321,39 @@ def main(technique, description, experiment_name, sample_size, handle_negations,
         if len(techniques_results) > 1:
             print("\nEtape 4/6 - Comparaison des techniques de prétraitement...")
 
-            # Créer le tableau de comparaison
+            # Créer le tableau de comparaison avec format spécifique (inclut Précision et Rappel)
             comparison_data = []
             for technique_name, results in techniques_results.items():
-                metrics = results['eval_metrics']
+                m = results['metrics']
                 row = {
                     'Technique': technique_name.capitalize(),
-                    'Accuracy': metrics['accuracy'],
-                    'F1-Score': metrics['f1_score'],
-                    'Précision': metrics['precision'],
-                    'Rappel': metrics['recall'],
-                    'Temps (s)': results['training_time']
+                    'Accuracy': m['accuracy'],
+                    'F1-Score': m['f1_score'],
+                    'Précision': m['precision'],
+                    'Rappel': m['recall'],
+                    'Temps (s)': m['training_time']
                 }
-                # Ajouter AUC si disponible
-                if 'auc_score' in metrics:
-                    row['AUC-ROC'] = metrics['auc_score']
+                if 'auc_score' in m:
+                    row['AUC-ROC'] = m['auc_score']
                 comparison_data.append(row)
 
             df_comparison = pd.DataFrame(comparison_data)
             print("\n   COMPARAISON DES TECHNIQUES:")
             print(df_comparison.to_string(index=False, float_format='%.4f'))
 
-            # Sélectionner le meilleur modèle (basé sur F1-score)
-            best_technique = max(techniques_results.keys(),
-                               key=lambda k: techniques_results[k]['eval_metrics']['f1_score'])
-            best_results = techniques_results[best_technique]
+            # Trouver le meilleur modèle
+            best_technique, best_metrics = find_best_technique(techniques_results)
 
             print(f"\n   MEILLEURE TECHNIQUE: {best_technique.upper()}")
-            print(f"   - F1-Score: {best_results['eval_metrics']['f1_score']:.4f}")
-            print(f"   - Accuracy: {best_results['eval_metrics']['accuracy']:.4f}")
-            if 'auc_score' in best_results['eval_metrics']:
-                print(f"   - AUC-ROC: {best_results['eval_metrics']['auc_score']:.4f}")
+            print(f"   - F1-Score: {best_metrics['f1_score']:.4f}")
+            print(f"   - Accuracy: {best_metrics['accuracy']:.4f}")
+            if 'auc_score' in best_metrics:
+                print(f"   - AUC-ROC: {best_metrics['auc_score']:.4f}")
         else:
             # Une seule technique
             technique_name = list(techniques_results.keys())[0]
             best_technique = technique_name
-            best_results = techniques_results[technique_name]
+            best_metrics = techniques_results[technique_name]['metrics']
             df_comparison = None
 
         # 5. Génération du rapport
@@ -380,52 +381,44 @@ CONFIGURATION:
 - Description: {description if description else 'Aucune'}{comparison_section}
 
 MODÈLE RETENU: {best_technique.capitalize()}
-- Accuracy: {best_results['eval_metrics']['accuracy']:.4f}
-- F1-Score: {best_results['eval_metrics']['f1_score']:.4f}
-- Précision: {best_results['eval_metrics']['precision']:.4f}
-- Rappel: {best_results['eval_metrics']['recall']:.4f}
-- Temps d'entraînement: {best_results['training_time']:.2f}s
+- Accuracy: {best_metrics['accuracy']:.4f}
+- F1-Score: {best_metrics['f1_score']:.4f}
+- Précision: {best_metrics['precision']:.4f}
+- Rappel: {best_metrics['recall']:.4f}
+- Temps d'entraînement: {best_metrics['training_time']:.2f}s
 
 CONCLUSION:
 Ce modèle sert de référence (baseline) pour comparer les modèles plus complexes.
 """
 
-        # Sauvegarder le rapport
-        report_name = "comparison" if len(techniques_results) > 1 else technique
-        report_path = f"reports/{report_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        os.makedirs(os.path.dirname(report_path), exist_ok=True)
-        with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(report)
-
+        # Sauvegarder le rapport avec utilitaire
+        report_name = "simple_comparison" if len(techniques_results) > 1 else f"simple_{technique}"
+        report_path = save_report(report, report_name)
         report_time = time.time() - report_start
         print(f"\nRapport sauvegardé: {report_path} (en {report_time:.1f}s)")
 
-        # Log du rapport dans MLflow
+        # Log du rapport dans MLflow avec utilitaire
         print("\nEtape 6/6 - Sauvegarde dans MLflow...")
         mlflow_start = time.time()
 
-        with mlflow.start_run(run_name=f"{technique}_summary"):
-            mlflow.set_tag("summary_type", "final_report")
-            if description:
-                mlflow.set_tag("description", description)
+        log_summary_run(
+            run_name=f"simple_{technique}_summary",
+            technique_used=technique,
+            best_technique=best_technique,
+            best_metrics=best_metrics,
+            total_samples=len(df),
+            techniques_tested=len(techniques_results),
+            additional_params={
+                'algorithm': 'Logistic Regression',
+                'vectorization': 'TF-IDF',
+                'handle_negations': handle_negations,
+                'handle_emotions': handle_emotions
+            },
+            description=description
+        )
 
-            mlflow.log_params({
-                'technique_used': technique,
-                'best_technique': best_technique,
-                'total_samples': len(df),
-                'techniques_tested': len(techniques_results)
-            })
-
-            summary_metrics = {
-                'best_accuracy': best_results['eval_metrics']['accuracy'],
-                'best_f1_score': best_results['eval_metrics']['f1_score']
-            }
-            # Ajouter AUC si disponible
-            if 'auc_score' in best_results['eval_metrics']:
-                summary_metrics['best_auc_score'] = best_results['eval_metrics']['auc_score']
-
-            mlflow.log_metrics(summary_metrics)
-
+        # Logger le rapport
+        with mlflow.start_run(run_name=f"simple_{technique}_summary", nested=True):
             mlflow.log_artifact(report_path, "reports")
 
         mlflow_time = time.time() - mlflow_start
