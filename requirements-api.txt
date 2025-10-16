@@ -4,6 +4,7 @@
 # API Framework
 fastapi>=0.118.0
 uvicorn>=0.23.0
+gunicorn>=21.2.0
 
 # Machine Learning Core (léger)
 numpy>=1.26.0
