@@ -5,7 +5,7 @@ Ce document décrit le fonctionnement des pipelines d'intégration et de déploi
 ## Vue d'ensemble
 
 ```
-Code Push → CI (Tests) → CD (Déploiement AWS) → Monitoring CloudWatch
+Code Push → CI (Tests) → CD (Déploiement Azure) → Monitoring Application Insights
 ```
 
 ## Workflows GitHub Actions
@@ -28,22 +28,23 @@ Code Push → CI (Tests) → CD (Déploiement AWS) → Monitoring CloudWatch
 
 **Résultat** : Badge de statut dans GitHub
 
-### 2. CD - Déploiement AWS (`.github/workflows/deploy.yml`)
+### 2. CD - Déploiement Azure (`.github/workflows/deploy.yml`)
 
 **Déclenché sur** :
 - Push vers `main` (après succès du CI)
-- Déclenchement manuel via GitHub Actions UI
+- Déclenchement manuel via GitHub Actions UI (`workflow_dispatch`)
 
 **Étapes** :
-1. 📦 **Package** - Création du ZIP de déploiement
-2. ☁️ **Upload S3** - Stockage du package
-3. 🚀 **Déploiement EB** - Mise à jour de l'environnement AWS
-4. ⏳ **Attente** - Vérification que le déploiement réussit
-5. 🏥 **Health Check** - Test de l'API déployée
+1. 📦 **Package** - Préparation du package de déploiement
+2. 🔐 **Azure Login** - Authentification avec Service Principal
+3. 🚀 **Déploiement Azure** - Mise à jour de l'App Service
+4. ⚙️ **Configuration** - Variables d'environnement (Application Insights)
+5. ⏳ **Attente** - Vérification que l'application démarre
+6. 🏥 **Health Check** - Test de l'API déployée
 
-**Durée estimée** : 8-12 minutes
+**Durée estimée** : 5-8 minutes
 
-**Résultat** : URL de l'API en production
+**Résultat** : URL de l'API en production - `https://sentiment-api-at2025.azurewebsites.net`
 
 ---
 
@@ -53,20 +54,24 @@ Code Push → CI (Tests) → CD (Déploiement AWS) → Monitoring CloudWatch
 
 Configurer dans **Settings → Secrets and variables → Actions** :
 
-| Secret | Description | Exemple |
-|--------|-------------|---------|
-| `AWS_ACCESS_KEY_ID` | Access key IAM user | `AKIAIOSFODNN7EXAMPLE` |
-| `AWS_SECRET_ACCESS_KEY` | Secret key IAM user | `wJalrXUtnFEMI/K7MDENG/...` |
+| Secret | Description | Obtention |
+|--------|-------------|-----------|
+| `AZURE_CREDENTIALS` | Service Principal JSON | `az ad sp create-for-rbac --sdk-auth` |
+| `AZURE_RESOURCE_GROUP` | Nom du Resource Group | `sentiment-analysis-rg` |
+| `AZURE_SUBSCRIPTION_ID` | ID de la subscription Azure | `az account show --query id -o tsv` |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Connection String Application Insights | Azure Portal → Application Insights |
 
-### Variables d'environnement (optionnel)
+**Documentation détaillée** : `docs/github_secrets_azure.md`
 
-Modifier dans `.github/workflows/deploy.yml` si nécessaire :
+### Variables d'environnement
+
+Configurées dans `.github/workflows/deploy.yml` :
 
 ```yaml
 env:
-  AWS_REGION: eu-west-1  # Votre région AWS
-  EB_APPLICATION_NAME: sentiment-analysis-api
-  EB_ENVIRONMENT_NAME: sentiment-analysis-api-prod
+  AZURE_WEBAPP_NAME: sentiment-api-at2025
+  AZURE_WEBAPP_PACKAGE_PATH: '.'
+  PYTHON_VERSION: '3.12'
 ```
 
 ---
@@ -91,7 +96,7 @@ git push origin main
 
 ```bash
 # Via GitHub UI
-# Actions → CD - Déploiement AWS → Run workflow → Run workflow
+# Actions → CD - Déploiement Azure → Run workflow → Run workflow
 ```
 
 ### Rollback en cas de problème
@@ -101,12 +106,10 @@ git push origin main
 git revert HEAD
 git push origin main  # Redéploie la version précédente
 
-# Option 2 : Via AWS EB
-aws elasticbeanstalk update-environment \
-  --application-name sentiment-analysis-api \
-  --environment-name sentiment-analysis-api-prod \
-  --version-label <version-précédente> \
-  --region eu-west-1
+# Option 2 : Via Azure CLI
+az webapp deployment list-publishing-profiles \
+  --name sentiment-api-at2025 \
+  --resource-group sentiment-analysis-rg
 ```
 
 ---
@@ -119,31 +122,32 @@ aws elasticbeanstalk update-environment \
 2. **Cliquer** sur le workflow en cours
 3. **Consulter** les logs en temps réel
 
-### Logs AWS CloudWatch
+### Logs Azure Application Insights
 
 ```bash
-# Via CLI
-aws logs tail /aws/elasticbeanstalk/sentiment-api/application --follow
+# Via Azure Portal
+# Application Insights → Logs → Requêtes KQL
 
-# Via Console
-# AWS → CloudWatch → Log groups → /aws/elasticbeanstalk/sentiment-api
+# Via CLI - Logs de l'App Service
+az webapp log tail \
+  --name sentiment-api-at2025 \
+  --resource-group sentiment-analysis-rg
 ```
 
-### Status de l'environnement
+### Status de l'App Service
 
 ```bash
 # Vérifier le statut
-aws elasticbeanstalk describe-environments \
-  --application-name sentiment-analysis-api \
-  --environment-names sentiment-analysis-api-prod \
-  --region eu-west-1
+az webapp show \
+  --name sentiment-api-at2025 \
+  --resource-group sentiment-analysis-rg \
+  --query "state" \
+  --output tsv
 
-# Consulter les événements récents
-aws elasticbeanstalk describe-events \
-  --application-name sentiment-analysis-api \
-  --environment-name sentiment-analysis-api-prod \
-  --max-items 10 \
-  --region eu-west-1
+# Consulter les déploiements récents
+az webapp deployment list \
+  --name sentiment-api-at2025 \
+  --resource-group sentiment-analysis-rg
 ```
 
 ---
@@ -154,12 +158,13 @@ aws elasticbeanstalk describe-events \
 
 **Production** :
 - Branche : `main`
-- Environnement EB : `sentiment-analysis-api-prod`
+- App Service : `sentiment-api-at2025`
 - Déploiement : Automatique sur push
+- URL : https://sentiment-api-at2025.azurewebsites.net
 
 **Développement** (optionnel) :
 - Branche : `develop`
-- Environnement EB : `sentiment-analysis-api-dev`
+- App Service : `sentiment-api-dev`
 - Déploiement : Manuel
 
 ### Workflow recommandé
@@ -180,7 +185,7 @@ git push origin feature/amelioration-modele
 # 4. Tester sur environnement de développement
 git checkout develop
 git push origin develop
-# Déploiement manuel sur sentiment-analysis-api-dev
+# Déploiement manuel sur sentiment-api-dev
 
 # 5. Si OK → Merge vers main
 # GitHub → Create Pull Request → main
@@ -220,7 +225,7 @@ Pour ne déployer que si les tests passent :
 # Dans deploy.yml
 jobs:
   deploy:
-    needs: [ci]  # Attend le workflow CI
+    needs: []  # Ajouter needs: [ci] pour attendre CI
 ```
 
 ---
@@ -241,14 +246,21 @@ pytest tests/ -v
 git push
 ```
 
-### CD échoue : "AWS credentials invalid"
+### CD échoue : "Azure login failed"
 
 **Cause** : Secrets GitHub mal configurés
 
 **Solution** :
 1. Vérifier les secrets dans GitHub Settings
-2. Re-générer les credentials IAM si nécessaire
-3. Mettre à jour les secrets
+2. Re-générer le Service Principal si nécessaire :
+```bash
+az ad sp create-for-rbac \
+  --name "github-actions-sentiment-api" \
+  --role contributor \
+  --scopes /subscriptions/$SUBSCRIPTION_ID/resourceGroups/sentiment-analysis-rg \
+  --sdk-auth
+```
+3. Mettre à jour le secret `AZURE_CREDENTIALS`
 
 ### Déploiement réussi mais API non accessible
 
@@ -257,22 +269,24 @@ git push
 **Solution** :
 ```bash
 # Consulter les logs
-aws logs tail /aws/elasticbeanstalk/sentiment-api/application --follow
+az webapp log tail \
+  --name sentiment-api-at2025 \
+  --resource-group sentiment-analysis-rg
 
 # Vérifier les variables d'environnement
-aws elasticbeanstalk describe-configuration-settings \
-  --application-name sentiment-analysis-api \
-  --environment-name sentiment-analysis-api-prod
+az webapp config appsettings list \
+  --name sentiment-api-at2025 \
+  --resource-group sentiment-analysis-rg
 ```
 
-### Out of memory sur t2.micro
+### Out of memory sur F1 (Free tier)
 
-**Cause** : Modèle trop volumineux
+**Cause** : Modèle trop volumineux pour le plan gratuit
 
 **Solutions** :
-1. Optimiser le modèle (réduire la taille)
-2. Utiliser t2.small (hors free-tier)
-3. Activer le swap sur l'instance
+1. Optimiser le modèle (réduire la taille des embeddings)
+2. Utiliser un plan payant (B1 Basic: ~13€/mois)
+3. Activer le swap (non disponible sur F1)
 
 ---
 
@@ -281,19 +295,43 @@ aws elasticbeanstalk describe-configuration-settings \
 ### Temps de déploiement typiques
 
 - **CI (Tests)** : 3-5 minutes
-- **CD (Déploiement)** : 8-12 minutes
-- **Total** : 11-17 minutes
+- **CD (Déploiement Azure)** : 5-8 minutes
+- **Total** : 8-13 minutes
 
 ### Optimisations possibles
 
 1. **Tests parallèles** : Réduire à 2-3 min
-2. **Cache Docker** : Réduire à 5-7 min
-3. **Déploiement blue/green** : Zéro downtime
+2. **Cache Docker** : Réduire à 3-5 min
+3. **Déploiement slots** : Zéro downtime (plans payants)
+
+---
+
+## Monitoring en production
+
+### Application Insights
+
+**Accès** :
+- Azure Portal → Application Insights → `sentiment-api-insights`
+
+**Métriques disponibles** :
+- Temps de réponse
+- Taux d'erreur
+- Nombre de requêtes
+- Custom events (misclassifications)
+
+### Alertes configurées
+
+| Alerte | Condition | Action |
+|--------|-----------|--------|
+| `high-misclassification-rate` | 3 erreurs en 5 min | Email via Action Group |
+
+**Documentation** : `docs/azure_configuration.md` (section 6.2)
 
 ---
 
 ## Ressources
 
 - [Documentation GitHub Actions](https://docs.github.com/en/actions)
-- [AWS Elastic Beanstalk CLI](https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/eb-cli3.html)
-- [Docker Build Best Practices](https://docs.docker.com/develop/dev-best-practices/)
+- [Azure App Service Deployment](https://docs.microsoft.com/azure/app-service/deploy-github-actions)
+- [Azure CLI Reference](https://docs.microsoft.com/cli/azure/)
+- [Application Insights Documentation](https://docs.microsoft.com/azure/azure-monitor/app/app-insights-overview)
