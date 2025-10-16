@@ -15,10 +15,15 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copie et installation des dépendances Python
-COPY requirements.txt .
+# Utilise requirements-api.txt si disponible, sinon requirements.txt
+COPY requirements*.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip setuptools wheel && \
-    pip install -r requirements.txt
+    if [ -f requirements-api.txt ]; then \
+        pip install -r requirements-api.txt; \
+    else \
+        pip install -r requirements.txt; \
+    fi
 
 # Copie du code source
 COPY . .
