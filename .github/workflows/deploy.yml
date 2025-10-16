@@ -63,22 +63,32 @@ jobs:
           package: ./deploy-package
 
       - name: Configuration des variables d'environnement Azure
-        run: |
-          az webapp config appsettings set \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-            --settings \
-              MODEL_PATH="./models/production/pyfunc_model/model" \
-              WEBSITES_PORT="8000" \
-              SCM_DO_BUILD_DURING_DEPLOYMENT="true"
-
-          # Configuration séparée pour Application Insights (peut contenir des caractères spéciaux)
-          if [ -n "${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}" ]; then
-            az webapp config appsettings set \
-              --name ${{ env.AZURE_WEBAPP_NAME }} \
-              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-              --settings APPLICATIONINSIGHTS_CONNECTION_STRING='${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}'
-          fi
+        uses: azure/appservice-settings@v1
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          app-settings-json: |
+            [
+              {
+                "name": "MODEL_PATH",
+                "value": "./models/production/pyfunc_model/model",
+                "slotSetting": false
+              },
+              {
+                "name": "WEBSITES_PORT",
+                "value": "8000",
+                "slotSetting": false
+              },
+              {
+                "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+                "value": "true",
+                "slotSetting": false
+              },
+              {
+                "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                "value": "${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}",
+                "slotSetting": false
+              }
+            ]
 
       - name: Attente du démarrage de l'application
         run: |
