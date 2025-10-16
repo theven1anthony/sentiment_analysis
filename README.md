@@ -220,43 +220,21 @@ docker-compose run training python optimize_hyperparameters.py --n-runs=20 --sam
 
 ```bash
 # Déployer depuis Model Registry vers production
-python deploy_best_model.py --name w2v_200K_model --version 1
+python deploy_model.py --name w2v_200K_model --version 1
 
 # Exemple avec modèle optimisé
-python deploy_best_model.py --name w2v_optimized_model --version 1
+python deploy_model.py --name w2v_optimized_model --version 1
 ```
 
 **Ce script:**
-- Charge le modèle pyfunc depuis MLflow Model Registry
-- Sauvegarde l'URI dans `models/production/model_uri.txt`
+- Télécharge le modèle pyfunc complet depuis MLflow Model Registry
+- Sauvegarde tous les artefacts (modèle + embeddings + préprocessing) dans `models/production/pyfunc_model/`
 - Crée les métadonnées dans `models/production/metadata.pkl`
+- Le modèle est utilisable sans connexion MLflow (local et Azure)
 
 #### Étape 3 : Démarrer l'API
 
-**Configuration du chargement du modèle**
-
-L'API supporte deux modes de chargement :
-
-**Mode 1 : Variables d'environnement (recommandé pour production AWS)**
-```bash
-# Créer un fichier .env (copier depuis .env.example)
-cp .env.example .env
-
-# Éditer le fichier .env avec votre configuration
-MODEL_NAME=w2v_200K_model
-MODEL_STAGE=Production  # ou MODEL_VERSION=1
-
-# Variables optionnelles
-MLFLOW_TRACKING_URI=http://localhost:5001
-ALERT_WINDOW_MINUTES=5
-ALERT_THRESHOLD=3
-```
-
-**Mode 2 : Fichier local (développement)**
-```bash
-# Le script deploy_best_model.py crée automatiquement model_uri.txt
-python deploy_best_model.py --name w2v_200K_model --version 1
-```
+L'API charge automatiquement le modèle depuis `models/production/pyfunc_model/model/`
 
 **Démarrer l'API**
 
@@ -481,13 +459,22 @@ docker-compose down
 - Interface Streamlit : http://localhost:8501
 - Documentation API : http://localhost:8000/docs
 
-### Déploiement cloud (AWS)
+### Déploiement cloud (Azure)
 ```bash
-# Configuration à venir
-# - AWS EC2 ou Lambda
+# Déploiement automatique via GitHub Actions
+# - Push vers la branche main déclenche le déploiement
+# - Azure App Service (Free tier F1)
 # - Pipeline CI/CD avec GitHub Actions
-# - Monitoring CloudWatch
+# - Monitoring Azure Application Insights
+
+# URL de production
+https://sentiment-api-at2025.azurewebsites.net
 ```
+
+**Documentation complète du déploiement :**
+- Configuration Azure : `docs/azure_configuration.md`
+- Secrets GitHub : `docs/github_secrets_azure.md`
+- Pipeline CI/CD : `.github/workflows/deploy.yml`
 
 ## Métriques et Monitoring
 
@@ -521,7 +508,7 @@ Latence     : < 50ms/tweet (inférence)
 - Surpasse BERT 50k (+0.7% F1) avec 6x moins de temps d'entraînement
 - Déployable sur CPU (pas de GPU requis)
 - Meilleure généralisation validée (gap train/val minimal : 0.073)
-- Compatible contraintes infrastructure AWS free-tier
+- Compatible contraintes infrastructure Azure free-tier (F1)
 
 ### Approches Testées
 
@@ -567,8 +554,8 @@ Retrouvez l'analyse technique détaillée, la méthodologie complète et tous le
 
 ### Surveillance en production
 - **Seuil d'alerte** : 3 prédictions incorrectes en 5 minutes
-- **Monitoring** : AWS CloudWatch
-- **Alertes** : Email/SMS automatiques
+- **Monitoring** : Azure Application Insights
+- **Alertes** : Email/SMS automatiques via Azure Monitor
 - **Drift detection** : Surveillance de la qualité des prédictions
 
 ## Contribution
