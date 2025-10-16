@@ -86,12 +86,15 @@ jobs:
           echo "⏳ Attente du démarrage de l'API..."
           sleep 15
 
+          echo "📋 Logs du conteneur:"
+          docker logs test-api
+
+          echo ""
           echo "🔍 Test du endpoint /health..."
           if curl -f http://localhost:8000/health; then
             echo "✅ API health check réussi"
           else
-            echo "❌ API health check échoué, logs du conteneur:"
-            docker logs test-api
+            echo "❌ API health check échoué"
             docker stop test-api
             docker rm test-api
             exit 1
