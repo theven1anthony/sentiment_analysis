@@ -66,29 +66,7 @@ jobs:
         uses: azure/appservice-settings@v1
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          app-settings-json: |
-            [
-              {
-                "name": "MODEL_PATH",
-                "value": "./models/production/pyfunc_model/model",
-                "slotSetting": false
-              },
-              {
-                "name": "WEBSITES_PORT",
-                "value": "8000",
-                "slotSetting": false
-              },
-              {
-                "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
-                "value": "true",
-                "slotSetting": false
-              },
-              {
-                "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-                "value": "${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}",
-                "slotSetting": false
-              }
-            ]
+          app-settings-json: '${{ secrets.AZURE_APP_SETTINGS_JSON }}'
 
       - name: Configuration du startup command
         run: |
