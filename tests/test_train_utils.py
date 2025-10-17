@@ -128,7 +128,8 @@ class TestSaveReportWithMockTimestamp:
         report_name = "test_report"
 
         # Fonction de timestamp mockée
-        mock_timestamp_fn = lambda: "20250101_120000"
+        def mock_timestamp_fn():
+            return "20250101_120000"
 
         # Utiliser tmp_path comme répertoire de rapports
         reports_dir = str(tmp_path / "reports")

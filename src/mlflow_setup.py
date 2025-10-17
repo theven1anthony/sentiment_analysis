@@ -1,6 +1,7 @@
 """
 Configuration et initialisation MLflow pour Air Paradis - Sentiment Analysis
 """
+
 import mlflow
 
 
@@ -13,7 +14,7 @@ class MLflowSetup:
             "simple_models": "Modèles classiques (logistic regression, naive bayes, svm)",
             "advanced_models": "Modèles avancés (LSTM, CNN, ensemble)",
             "bert_models": "Modèles BERT (bert-base, distilbert, roberta)",
-            "embeddings_comparison": "Comparaison embeddings (word2vec, glove, fasttext)"
+            "embeddings_comparison": "Comparaison embeddings (word2vec, glove, fasttext)",
         }
 
     def setup_mlflow_tracking(self):
@@ -34,8 +35,7 @@ class MLflowSetup:
         for exp_name, description in self.experiments.items():
             try:
                 experiment_id = mlflow.create_experiment(
-                    name=exp_name,
-                    tags={"project": "air_paradis_sentiment", "type": "sentiment_analysis"}
+                    name=exp_name, tags={"project": "air_paradis_sentiment", "type": "sentiment_analysis"}
                 )
                 created_experiments.append((exp_name, experiment_id))
                 print(f"Expérience créée: {exp_name} (ID: {experiment_id})")
@@ -54,7 +54,7 @@ class MLflowSetup:
         registry_tags = {
             "Production": {"stage": "production", "approval": "required"},
             "Staging": {"stage": "staging", "testing": "active"},
-            "Archived": {"stage": "archived", "status": "deprecated"}
+            "Archived": {"stage": "archived", "status": "deprecated"},
         }
         return registry_tags
 
@@ -73,11 +73,7 @@ class MLflowSetup:
         print(f"Expériences créées: {len(experiments)}")
         print(f"Registry tags configurés: {len(registry_tags)}")
 
-        return {
-            "experiments": experiments,
-            "registry_tags": registry_tags,
-            "tracking_uri": self.tracking_uri
-        }
+        return {"experiments": experiments, "registry_tags": registry_tags, "tracking_uri": self.tracking_uri}
 
 
 def main():

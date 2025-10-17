@@ -70,11 +70,7 @@ class ModelManager:
         """
         with mlflow.start_run() as run:
             # Log du modèle
-            mlflow.sklearn.log_model(
-                sk_model=model,
-                artifact_path="model",
-                registered_model_name=model_name
-            )
+            mlflow.sklearn.log_model(sk_model=model, artifact_path="model", registered_model_name=model_name)
 
             # Ajout de métadonnées
             if description:
@@ -101,7 +97,7 @@ class ModelManager:
                 tf_meta_graph_tags=None,
                 tf_signature_def_key=None,
                 artifact_path="model",
-                registered_model_name=model_name
+                registered_model_name=model_name,
             )
 
             if description:
@@ -111,11 +107,7 @@ class ModelManager:
 
     @staticmethod
     def get_or_create_model(
-        model_name: str,
-        train_func: callable,
-        force_retrain: bool = False,
-        stage: str = "None",
-        **train_kwargs
+        model_name: str, train_func: callable, force_retrain: bool = False, stage: str = "None", **train_kwargs
     ):
         """
         Pattern standard MLflow : charge le modèle existant ou l'entraîne.
@@ -154,11 +146,7 @@ class ModelManager:
             stage: Stage cible (Staging, Production)
         """
         client = mlflow.tracking.MlflowClient()
-        client.transition_model_version_stage(
-            name=model_name,
-            version=version,
-            stage=stage
-        )
+        client.transition_model_version_stage(name=model_name, version=version, stage=stage)
         print(f"✓ Modèle {model_name} v{version} promu vers {stage}")
 
     @staticmethod
@@ -177,7 +165,7 @@ class ModelManager:
             latest_versions = client.get_latest_versions(model.name, stages=["None", "Staging", "Production"])
             models_info[model.name] = {
                 "description": model.description,
-                "versions": {v.current_stage: v.version for v in latest_versions}
+                "versions": {v.current_stage: v.version for v in latest_versions},
             }
 
         return models_info
@@ -259,7 +247,7 @@ def train_and_register_model(
     experiment_name: str,
     description: str = "",
     force_retrain: bool = False,
-    **train_kwargs
+    **train_kwargs,
 ):
     """
     Pattern standard pour entraîner et enregistrer un modèle.

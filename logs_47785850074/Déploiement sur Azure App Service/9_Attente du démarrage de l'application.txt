@@ -1,0 +1,17 @@
+﻿2025-10-16T19:33:39.0054397Z ##[group]Run echo "⏳ Attente du démarrage de l'application..."
+2025-10-16T19:33:39.0055363Z [36;1mecho "⏳ Attente du démarrage de l'application..."[0m
+2025-10-16T19:33:39.0056019Z [36;1msleep 30[0m
+2025-10-16T19:33:39.0104101Z shell: /usr/bin/bash -e ***0***
+2025-10-16T19:33:39.0104653Z env:
+2025-10-16T19:33:39.0105138Z   AZURE_WEBAPP_NAME: sentiment-api-at2025
+2025-10-16T19:33:39.0105804Z   AZURE_WEBAPP_PACKAGE_PATH: .
+2025-10-16T19:33:39.0106342Z   PYTHON_VERSION: 3.12
+2025-10-16T19:33:39.0106962Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-10-16T19:33:39.0107867Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib/pkgconfig
+2025-10-16T19:33:39.0108767Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-10-16T19:33:39.0109601Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-10-16T19:33:39.0110415Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-10-16T19:33:39.0111250Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib
+2025-10-16T19:33:39.0112008Z   AZURE_HTTP_USER_AGENT: 
+2025-10-16T19:33:39.0112516Z ##[endgroup]
+2025-10-16T19:33:39.0199984Z ⏳ Attente du démarrage de l'application...

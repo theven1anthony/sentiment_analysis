@@ -15,10 +15,7 @@ logger = logging.getLogger(__name__)
 class USEEmbedding:
     """Génère des embeddings Universal Sentence Encoder pour les textes."""
 
-    def __init__(
-        self,
-        model_url: str = "https://tfhub.dev/google/universal-sentence-encoder/4"
-    ):
+    def __init__(self, model_url: str = "https://tfhub.dev/google/universal-sentence-encoder/4"):
         """
         Initialise le modèle Universal Sentence Encoder.
 
@@ -28,7 +25,7 @@ class USEEmbedding:
         self.model_url = model_url
         self.model: Optional[tf.keras.Model] = None
 
-    def fit(self, texts: List[str]) -> 'USEEmbedding':
+    def fit(self, texts: List[str]) -> "USEEmbedding":
         """
         Charge le modèle USE pré-entraîné.
         Pas d'entraînement nécessaire pour USE (modèle pré-entraîné).
@@ -65,7 +62,7 @@ class USEEmbedding:
         # Encoder par batches pour économiser la mémoire
         all_embeddings = []
         for i in range(0, len(texts), batch_size):
-            batch_texts = texts[i:i + batch_size]
+            batch_texts = texts[i : i + batch_size]
             batch_embeddings = self.model(batch_texts)
             all_embeddings.append(np.array(batch_embeddings))
 
@@ -88,7 +85,7 @@ class USEEmbedding:
     def get_params(self) -> dict:
         """Retourne les paramètres du modèle pour logging MLflow."""
         return {
-            'embedding_type': 'use',
-            'model_url': self.model_url,
-            'vector_size': 512  # USE produit toujours des vecteurs de 512 dimensions
+            "embedding_type": "use",
+            "model_url": self.model_url,
+            "vector_size": 512,  # USE produit toujours des vecteurs de 512 dimensions
         }

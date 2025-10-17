@@ -1,0 +1,73 @@
+﻿2025-10-16T19:24:22.6387908Z ##[group]Run actions/checkout@v4
+2025-10-16T19:24:22.6388618Z with:
+2025-10-16T19:24:22.6388975Z   repository: theven1anthony/sentiment_analysis
+2025-10-16T19:24:22.6389538Z   token: ***
+2025-10-16T19:24:22.6389846Z   ssh-strict: true
+2025-10-16T19:24:22.6390143Z   ssh-user: git
+2025-10-16T19:24:22.6390445Z   persist-credentials: true
+2025-10-16T19:24:22.6390779Z   clean: true
+2025-10-16T19:24:22.6391087Z   sparse-checkout-cone-mode: true
+2025-10-16T19:24:22.6391440Z   fetch-depth: 1
+2025-10-16T19:24:22.6391738Z   fetch-tags: false
+2025-10-16T19:24:22.6392039Z   show-progress: true
+2025-10-16T19:24:22.6392346Z   lfs: false
+2025-10-16T19:24:22.6392632Z   submodules: false
+2025-10-16T19:24:22.6392952Z   set-safe-directory: true
+2025-10-16T19:24:22.6393885Z env:
+2025-10-16T19:24:22.6394252Z   AZURE_WEBAPP_NAME: sentiment-api-at2025
+2025-10-16T19:24:22.6394665Z   AZURE_WEBAPP_PACKAGE_PATH: .
+2025-10-16T19:24:22.6395016Z   PYTHON_VERSION: 3.12
+2025-10-16T19:24:22.6395354Z ##[endgroup]
+2025-10-16T19:24:22.7517381Z Syncing repository: theven1anthony/sentiment_analysis
+2025-10-16T19:24:22.7519450Z ##[group]Getting Git version info
+2025-10-16T19:24:22.7520179Z Working directory is '/home/runner/work/sentiment_analysis/sentiment_analysis'
+2025-10-16T19:24:22.7520940Z [command]/usr/bin/git version
+2025-10-16T19:24:22.7612706Z git version 2.51.0
+2025-10-16T19:24:22.7642060Z ##[endgroup]
+2025-10-16T19:24:22.7658440Z Temporarily overriding HOME='/home/runner/work/_temp/d7dbfd91-c9e3-4d00-9e72-7b42fa2e1803' before making global git config changes
+2025-10-16T19:24:22.7662318Z Adding repository directory to the temporary git global config as a safe directory
+2025-10-16T19:24:22.7665630Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/sentiment_analysis/sentiment_analysis
+2025-10-16T19:24:22.7709769Z Deleting the contents of '/home/runner/work/sentiment_analysis/sentiment_analysis'
+2025-10-16T19:24:22.7715636Z ##[group]Initializing the repository
+2025-10-16T19:24:22.7720655Z [command]/usr/bin/git init /home/runner/work/sentiment_analysis/sentiment_analysis
+2025-10-16T19:24:22.7833364Z hint: Using 'master' as the name for the initial branch. This default branch name
+2025-10-16T19:24:22.7840011Z hint: is subject to change. To configure the initial branch name to use in all
+2025-10-16T19:24:22.7841225Z hint: of your new repositories, which will suppress this warning, call:
+2025-10-16T19:24:22.7842150Z hint:
+2025-10-16T19:24:22.7842910Z hint: 	git config --global init.defaultBranch <name>
+2025-10-16T19:24:22.7844024Z hint:
+2025-10-16T19:24:22.7844751Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2025-10-16T19:24:22.7845767Z hint: 'development'. The just-created branch can be renamed via this command:
+2025-10-16T19:24:22.7846579Z hint:
+2025-10-16T19:24:22.7847076Z hint: 	git branch -m <name>
+2025-10-16T19:24:22.7847673Z hint:
+2025-10-16T19:24:22.7848517Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2025-10-16T19:24:22.7849877Z Initialized empty Git repository in /home/runner/work/sentiment_analysis/sentiment_analysis/.git/
+2025-10-16T19:24:22.7858323Z [command]/usr/bin/git remote add origin https://github.com/theven1anthony/sentiment_analysis
+2025-10-16T19:24:22.7899814Z ##[endgroup]
+2025-10-16T19:24:22.7900813Z ##[group]Disabling automatic garbage collection
+2025-10-16T19:24:22.7905991Z [command]/usr/bin/git config --local gc.auto 0
+2025-10-16T19:24:22.7938842Z ##[endgroup]
+2025-10-16T19:24:22.7939908Z ##[group]Setting up auth
+2025-10-16T19:24:22.7946683Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-10-16T19:24:22.7979962Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-10-16T19:24:22.8328128Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-10-16T19:24:22.8360317Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-10-16T19:24:22.8590044Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2025-10-16T19:24:22.8626021Z ##[endgroup]
+2025-10-16T19:24:22.8628209Z ##[group]Fetching the repository
+2025-10-16T19:24:22.8637098Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +6ac28818c9bc442b69fde8f77b0bd39aa014a882:refs/remotes/origin/main
+2025-10-16T19:24:24.6872733Z From https://github.com/theven1anthony/sentiment_analysis
+2025-10-16T19:24:24.6884736Z  * [new ref]         6ac28818c9bc442b69fde8f77b0bd39aa014a882 -> origin/main
+2025-10-16T19:24:24.6907100Z ##[endgroup]
+2025-10-16T19:24:24.6911295Z ##[group]Determining the checkout info
+2025-10-16T19:24:24.6913903Z ##[endgroup]
+2025-10-16T19:24:24.6916359Z [command]/usr/bin/git sparse-checkout disable
+2025-10-16T19:24:24.6974603Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2025-10-16T19:24:24.7022477Z ##[group]Checking out the ref
+2025-10-16T19:24:24.7027838Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2025-10-16T19:24:24.8282130Z Switched to a new branch 'main'
+2025-10-16T19:24:24.8283897Z branch 'main' set up to track 'origin/main'.
+2025-10-16T19:24:24.8299374Z ##[endgroup]
+2025-10-16T19:24:24.8365331Z [command]/usr/bin/git log -1 --format=%H
+2025-10-16T19:24:24.8398675Z 6ac28818c9bc442b69fde8f77b0bd39aa014a882

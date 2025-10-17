@@ -1,6 +1,7 @@
 """
 Utilitaires MLflow pour le tracking et la gestion des modèles
 """
+
 import mlflow
 import mlflow.sklearn
 import mlflow.tensorflow
@@ -30,26 +31,20 @@ class MLflowTracker:
         if tags is None:
             tags = {}
 
-        tags.update({
-            "mlflow.runName": run_name,
-            "project": "air_paradis_sentiment",
-            "timestamp": datetime.now().isoformat()
-        })
+        tags.update(
+            {"mlflow.runName": run_name, "project": "air_paradis_sentiment", "timestamp": datetime.now().isoformat()}
+        )
 
         return mlflow.start_run(run_name=run_name, tags=tags)
 
     def log_preprocessing_params(self, params: Dict[str, Any]):
         """Log les paramètres de preprocessing"""
-        preprocessing_params = {
-            f"preprocessing.{k}": v for k, v in params.items()
-        }
+        preprocessing_params = {f"preprocessing.{k}": v for k, v in params.items()}
         mlflow.log_params(preprocessing_params)
 
     def log_model_params(self, params: Dict[str, Any]):
         """Log les paramètres du modèle"""
-        model_params = {
-            f"model.{k}": v for k, v in params.items()
-        }
+        model_params = {f"model.{k}": v for k, v in params.items()}
         mlflow.log_params(model_params)
 
     def log_training_metrics(self, metrics: Dict[str, float], step: Optional[int] = None):
@@ -72,8 +67,7 @@ class MLflowTracker:
         mlflow.log_metric("performance.inference_time_ms", inference_time * 1000)
         mlflow.log_metric("performance.model_size_mb", model_size_mb)
 
-    def log_confusion_matrix(self, y_true: np.ndarray, y_pred: np.ndarray,
-                           class_names: List[str] = None):
+    def log_confusion_matrix(self, y_true: np.ndarray, y_pred: np.ndarray, class_names: List[str] = None):
         """Log la matrice de confusion comme artifact"""
         from sklearn.metrics import confusion_matrix
         import matplotlib.pyplot as plt
@@ -82,15 +76,20 @@ class MLflowTracker:
         cm = confusion_matrix(y_true, y_pred)
 
         plt.figure(figsize=(8, 6))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                   xticklabels=class_names or ['Negative', 'Positive'],
-                   yticklabels=class_names or ['Negative', 'Positive'])
-        plt.title('Matrice de Confusion')
-        plt.ylabel('Vraie Classe')
-        plt.xlabel('Classe Prédite')
+        sns.heatmap(
+            cm,
+            annot=True,
+            fmt="d",
+            cmap="Blues",
+            xticklabels=class_names or ["Negative", "Positive"],
+            yticklabels=class_names or ["Negative", "Positive"],
+        )
+        plt.title("Matrice de Confusion")
+        plt.ylabel("Vraie Classe")
+        plt.xlabel("Classe Prédite")
 
-        plt.savefig('confusion_matrix.png', dpi=300, bbox_inches='tight')
-        mlflow.log_artifact('confusion_matrix.png', 'plots')
+        plt.savefig("confusion_matrix.png", dpi=300, bbox_inches="tight")
+        mlflow.log_artifact("confusion_matrix.png", "plots")
         plt.close()
 
     def log_training_history(self, history: Dict[str, List[float]]):
@@ -99,14 +98,15 @@ class MLflowTracker:
             for epoch, value in enumerate(values):
                 mlflow.log_metric(metric, value, step=epoch)
 
-    def log_embeddings_info(self, embedding_type: str, vocab_size: int,
-                           embedding_dim: int, model_path: str = None):
+    def log_embeddings_info(self, embedding_type: str, vocab_size: int, embedding_dim: int, model_path: str = None):
         """Log les informations des embeddings"""
-        mlflow.log_params({
-            "embeddings.type": embedding_type,
-            "embeddings.vocab_size": vocab_size,
-            "embeddings.dimension": embedding_dim
-        })
+        mlflow.log_params(
+            {
+                "embeddings.type": embedding_type,
+                "embeddings.vocab_size": vocab_size,
+                "embeddings.dimension": embedding_dim,
+            }
+        )
 
         if model_path and Path(model_path).exists():
             mlflow.log_artifact(model_path, "embeddings")
@@ -118,14 +118,9 @@ class ModelRegistry:
     def __init__(self):
         self.stages = ["None", "Staging", "Production", "Archived"]
 
-    def register_model(self, model_uri: str, model_name: str,
-                      description: str = None) -> str:
+    def register_model(self, model_uri: str, model_name: str, description: str = None) -> str:
         """Enregistre un modèle dans le registry"""
-        result = mlflow.register_model(
-            model_uri=model_uri,
-            name=model_name,
-            description=description
-        )
+        result = mlflow.register_model(model_uri=model_uri, name=model_name, description=description)
         return result.version
 
     def promote_model(self, model_name: str, version: str, stage: str):
@@ -134,11 +129,7 @@ class ModelRegistry:
             raise ValueError(f"Stage invalide. Stages disponibles: {self.stages}")
 
         client = mlflow.tracking.MlflowClient()
-        client.transition_model_version_stage(
-            name=model_name,
-            version=version,
-            stage=stage
-        )
+        client.transition_model_version_stage(name=model_name, version=version, stage=stage)
 
     def get_latest_version(self, model_name: str, stage: str = "Production"):
         """Récupère la dernière version d'un modèle en production"""
@@ -157,11 +148,7 @@ class ModelRegistry:
         comparison_data = []
         for version in versions:
             run = client.get_run(version.run_id)
-            version_data = {
-                "version": version.version,
-                "stage": version.current_stage,
-                "run_id": version.run_id[:8]
-            }
+            version_data = {"version": version.version, "stage": version.current_stage, "run_id": version.run_id[:8]}
 
             for metric in metrics:
                 version_data[metric] = run.data.metrics.get(metric, "N/A")
@@ -173,6 +160,7 @@ class ModelRegistry:
 
 def track_experiment(experiment_name: str, run_name: str):
     """Décorateur pour tracker automatiquement une expérience"""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             tracker = MLflowTracker(experiment_name)
@@ -182,5 +170,7 @@ def track_experiment(experiment_name: str, run_name: str):
                 execution_time = time.time() - start_time
                 mlflow.log_metric("execution_time_seconds", execution_time)
                 return result
+
         return wrapper
+
     return decorator

@@ -21,7 +21,7 @@ class Word2VecEmbedding:
         min_count: int = 2,
         workers: int = 4,
         epochs: int = 10,
-        sg: int = 0  # 0 = CBOW, 1 = Skip-gram
+        sg: int = 0,  # 0 = CBOW, 1 = Skip-gram
     ):
         """
         Initialise le modèle Word2Vec.
@@ -42,7 +42,7 @@ class Word2VecEmbedding:
         self.sg = sg
         self.model: Optional[Word2Vec] = None
 
-    def fit(self, texts: List[str]) -> 'Word2VecEmbedding':
+    def fit(self, texts: List[str]) -> "Word2VecEmbedding":
         """
         Entraîne le modèle Word2Vec sur le corpus.
 
@@ -63,7 +63,7 @@ class Word2VecEmbedding:
             min_count=self.min_count,
             workers=self.workers,
             epochs=self.epochs,
-            sg=self.sg
+            sg=self.sg,
         )
 
         logger.info(f"Word2Vec terminé - Vocabulaire: {len(self.model.wv)} mots")
@@ -150,8 +150,9 @@ class Word2VecEmbedding:
         self.fit(texts)
         return self.transform(texts, max_len=max_len, average=average)
 
-    def transform_batched(self, texts: List[str], max_len: int = 50, average: bool = False,
-                          batch_size: int = 5000) -> np.ndarray:
+    def transform_batched(
+        self, texts: List[str], max_len: int = 50, average: bool = False, batch_size: int = 5000
+    ) -> np.ndarray:
         """
         Transforme les textes en embeddings par batches (économie mémoire).
 
@@ -188,10 +189,10 @@ class Word2VecEmbedding:
     def get_params(self) -> dict:
         """Retourne les paramètres du modèle pour logging MLflow."""
         return {
-            'embedding_type': 'word2vec',
-            'vector_size': self.vector_size,
-            'window': self.window,
-            'min_count': self.min_count,
-            'epochs': self.epochs,
-            'architecture': 'skip-gram' if self.sg == 1 else 'cbow'
+            "embedding_type": "word2vec",
+            "vector_size": self.vector_size,
+            "window": self.window,
+            "min_count": self.min_count,
+            "epochs": self.epochs,
+            "architecture": "skip-gram" if self.sg == 1 else "cbow",
         }

@@ -23,7 +23,7 @@ class FastTextEmbedding:
         epochs: int = 10,
         sg: int = 0,  # 0 = CBOW, 1 = Skip-gram
         min_n: int = 3,  # Taille min des n-grammes de caractères
-        max_n: int = 6   # Taille max des n-grammes de caractères
+        max_n: int = 6,  # Taille max des n-grammes de caractères
     ):
         """
         Initialise le modèle FastText.
@@ -48,7 +48,7 @@ class FastTextEmbedding:
         self.max_n = max_n
         self.model: Optional[FastText] = None
 
-    def fit(self, texts: List[str]) -> 'FastTextEmbedding':
+    def fit(self, texts: List[str]) -> "FastTextEmbedding":
         """
         Entraîne le modèle FastText sur le corpus.
 
@@ -71,7 +71,7 @@ class FastTextEmbedding:
             epochs=self.epochs,
             sg=self.sg,
             min_n=self.min_n,
-            max_n=self.max_n
+            max_n=self.max_n,
         )
 
         logger.info(f"FastText terminé - Vocabulaire: {len(self.model.wv)} mots")
@@ -163,12 +163,12 @@ class FastTextEmbedding:
     def get_params(self) -> dict:
         """Retourne les paramètres du modèle pour logging MLflow."""
         return {
-            'embedding_type': 'fasttext',
-            'vector_size': self.vector_size,
-            'window': self.window,
-            'min_count': self.min_count,
-            'epochs': self.epochs,
-            'architecture': 'skip-gram' if self.sg == 1 else 'cbow',
-            'min_n': self.min_n,
-            'max_n': self.max_n
+            "embedding_type": "fasttext",
+            "vector_size": self.vector_size,
+            "window": self.window,
+            "min_count": self.min_count,
+            "epochs": self.epochs,
+            "architecture": "skip-gram" if self.sg == 1 else "cbow",
+            "min_n": self.min_n,
+            "max_n": self.max_n,
         }

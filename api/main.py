@@ -17,7 +17,7 @@ import pandas as pd
 import mlflow.pyfunc
 
 # Ajouter le dossier src au path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from api.models import (
     PredictRequest,
@@ -25,12 +25,13 @@ from api.models import (
     FeedbackRequest,
     FeedbackResponse,
     HealthResponse,
-    ModelInfoResponse
+    ModelInfoResponse,
 )
 
 # Import monitoring Azure (optionnel si connection string non configurée)
 try:
     from monitoring.azure_monitor_integration import azure_monitor
+
     AZURE_MONITOR_ENABLED = True
 except ImportError:
     AZURE_MONITOR_ENABLED = False
@@ -65,7 +66,7 @@ app = FastAPI(
     title="Air Paradis Sentiment Analysis API",
     description="API de prédiction de sentiment pour tweets",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS pour permettre les requêtes depuis Streamlit
@@ -105,7 +106,7 @@ def load_model():
         # Charger les métadonnées si disponibles (remonter de 2 niveaux depuis model/)
         metadata_path = os.path.join(os.path.dirname(os.path.dirname(model_path)), "metadata.pkl")
         if os.path.exists(metadata_path):
-            with open(metadata_path, 'rb') as f:
+            with open(metadata_path, "rb") as f:
                 model_metadata = pickle.load(f)
             print(f"✓ Métadonnées chargées:")
             print(f"  Modèle: {model_metadata.get('model_name', 'unknown')}")
@@ -119,14 +120,13 @@ def load_model():
     except Exception as e:
         print(f"✗ Erreur lors du chargement du modèle: {e}")
         import traceback
+
         traceback.print_exc()
         model = None
 
 
 def clean_old_misclassifications():
     """Supprime les erreurs plus anciennes que ALERT_WINDOW_MINUTES."""
-    global misclassified_queue
-
     cutoff_time = datetime.now() - timedelta(minutes=ALERT_WINDOW_MINUTES)
 
     while misclassified_queue and misclassified_queue[0] < cutoff_time:
@@ -139,12 +139,7 @@ async def root():
     return {
         "message": "Air Paradis Sentiment Analysis API",
         "version": "1.0.0",
-        "endpoints": {
-            "predict": "/predict",
-            "feedback": "/feedback",
-            "health": "/health",
-            "model_info": "/model/info"
-        }
+        "endpoints": {"predict": "/predict", "feedback": "/feedback", "health": "/health", "model_info": "/model/info"},
     }
 
 
@@ -162,7 +157,7 @@ async def predict(request: PredictRequest):
     if model is None:
         raise HTTPException(
             status_code=503,
-            detail="Modèle non chargé. Exécutez: python deploy_model.py --name <model_name> --version <version>"
+            detail="Modèle non chargé. Exécutez: python deploy_model.py --name <model_name> --version <version>",
         )
 
     try:
@@ -174,8 +169,8 @@ async def predict(request: PredictRequest):
         predictions = model.predict(input_df)
 
         # Extraire sentiment et confidence
-        sentiment = int(predictions['sentiment'].iloc[0])
-        confidence = float(predictions['confidence'].iloc[0])
+        sentiment = int(predictions["sentiment"].iloc[0])
+        confidence = float(predictions["confidence"].iloc[0])
 
         # Générer ID et timestamp
         prediction_id = f"pred_{uuid.uuid4().hex[:8]}"
@@ -186,16 +181,13 @@ async def predict(request: PredictRequest):
             confidence=confidence,
             text=request.text,
             prediction_id=prediction_id,
-            timestamp=timestamp
+            timestamp=timestamp,
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur lors de la prédiction: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la prédiction: {str(e)}")
 
 
 @app.post("/feedback", response_model=FeedbackResponse, tags=["Feedback"])
@@ -210,8 +202,6 @@ async def feedback(request: FeedbackRequest):
     Returns:
         Statut de l'enregistrement et alerte si nécessaire
     """
-    global misclassified_queue
-
     try:
         # 1. Nettoyer les anciennes erreurs
         clean_old_misclassifications()
@@ -230,7 +220,7 @@ async def feedback(request: FeedbackRequest):
                     text=request.text,
                     predicted_sentiment=request.predicted_sentiment,
                     actual_sentiment=request.actual_sentiment,
-                    confidence=getattr(request, 'confidence', 0.0)
+                    confidence=getattr(request, "confidence", 0.0),
                 )
 
             # Vérifier le seuil d'alerte
@@ -245,8 +235,8 @@ async def feedback(request: FeedbackRequest):
                             "misclassified_count": len(misclassified_queue),
                             "window_minutes": ALERT_WINDOW_MINUTES,
                             "threshold": ALERT_THRESHOLD,
-                            "latest_text_preview": request.text[:100]
-                        }
+                            "latest_text_preview": request.text[:100],
+                        },
                     )
 
                 print(f"⚠️  ALERTE: {len(misclassified_queue)} erreurs en {ALERT_WINDOW_MINUTES} minutes")
@@ -257,16 +247,17 @@ async def feedback(request: FeedbackRequest):
 
         return FeedbackResponse(
             status="feedback_recorded",
-            message="Merci pour votre retour" if not alert_triggered else "Alerte déclenchée: performance du modèle dégradée",
+            message=(
+                "Merci pour votre retour"
+                if not alert_triggered
+                else "Alerte déclenchée: performance du modèle dégradée"
+            ),
             alert_triggered=alert_triggered,
-            misclassified_count=misclassified_count
+            misclassified_count=misclassified_count,
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur lors de l'enregistrement du feedback: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'enregistrement du feedback: {str(e)}")
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Monitoring"])
@@ -280,13 +271,10 @@ async def health():
     """
     model_loaded = model is not None
     status = "healthy" if model_loaded else "unhealthy"
-    model_type = model_metadata.get('model_type') if model_metadata else None
+    model_type = model_metadata.get("model_type") if model_metadata else None
 
     return HealthResponse(
-        status=status,
-        model_loaded=model_loaded,
-        model_type=model_type,
-        timestamp=datetime.now().isoformat()
+        status=status, model_loaded=model_loaded, model_type=model_type, timestamp=datetime.now().isoformat()
     )
 
 
@@ -299,15 +287,12 @@ async def model_info():
         Métadonnées du modèle (type, métriques, date d'entraînement)
     """
     if not model_metadata:
-        raise HTTPException(
-            status_code=404,
-            detail="Métadonnées du modèle non disponibles"
-        )
+        raise HTTPException(status_code=404, detail="Métadonnées du modèle non disponibles")
 
     return ModelInfoResponse(
-        model_type=model_metadata.get('model_type', 'unknown'),
-        technique=model_metadata.get('technique', 'unknown'),
-        f1_score=model_metadata.get('f1_score'),
-        accuracy=model_metadata.get('accuracy'),
-        training_date=model_metadata.get('training_date')
+        model_type=model_metadata.get("model_type", "unknown"),
+        technique=model_metadata.get("technique", "unknown"),
+        f1_score=model_metadata.get("f1_score"),
+        accuracy=model_metadata.get("accuracy"),
+        training_date=model_metadata.get("training_date"),
     )

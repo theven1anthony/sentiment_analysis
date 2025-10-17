@@ -1,6 +1,7 @@
 """
 Intégration Azure Monitor et Application Insights pour le monitoring des modèles en production
 """
+
 import os
 import logging
 from typing import Dict, Optional
@@ -31,7 +32,7 @@ class AzureMonitor:
             "accuracy_min": 0.80,
             "latency_max_ms": 500,
             "error_rate_max": 0.05,
-            "misclassified_count_5min": 3
+            "misclassified_count_5min": 3,
         }
 
         # Configurer Azure Monitor si connection string disponible
@@ -52,22 +53,25 @@ class AzureMonitor:
 
     def _setup_logger(self):
         """Configure le logger pour Azure Monitor"""
-        logger = logging.getLogger('azure_monitor')
+        logger = logging.getLogger("azure_monitor")
         logger.setLevel(logging.INFO)
 
         if not logger.handlers:
             handler = logging.StreamHandler()
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
             handler.setFormatter(formatter)
             logger.addHandler(handler)
 
         return logger
 
-    def log_prediction_metrics(self, model_name: str, model_version: str,
-                              prediction_time_ms: float, confidence: float,
-                              is_correct: Optional[bool] = None):
+    def log_prediction_metrics(
+        self,
+        model_name: str,
+        model_version: str,
+        prediction_time_ms: float,
+        confidence: float,
+        is_correct: Optional[bool] = None,
+    ):
         """
         Log les métriques d'une prédiction dans Application Insights
 
@@ -120,8 +124,7 @@ class AzureMonitor:
         except Exception as e:
             self.logger.error(f"Erreur lors du log d'événement: {str(e)}")
 
-    def log_misclassification(self, text: str, predicted_sentiment: int,
-                             actual_sentiment: int, confidence: float):
+    def log_misclassification(self, text: str, predicted_sentiment: int, actual_sentiment: int, confidence: float):
         """
         Log une erreur de classification dans Application Insights
 
@@ -136,7 +139,7 @@ class AzureMonitor:
             "predicted_sentiment": predicted_sentiment,
             "actual_sentiment": actual_sentiment,
             "confidence": confidence,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         self.log_custom_event("misclassification", properties)
@@ -153,11 +156,7 @@ class AzureMonitor:
             alert_type: Type d'alerte (ex: "high_error_rate")
             details: Détails de l'alerte
         """
-        properties = {
-            "alert_type": alert_type,
-            "timestamp": datetime.now().isoformat(),
-            **details
-        }
+        properties = {"alert_type": alert_type, "timestamp": datetime.now().isoformat(), **details}
 
         self.log_custom_event("alert_triggered", properties)
         self.logger.error(f"Alerte déclenchée: {alert_type} - {details}")

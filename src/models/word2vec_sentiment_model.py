@@ -38,12 +38,10 @@ class Word2VecSentimentModel(mlflow.pyfunc.PythonModel):
         from preprocessing.text_cleaner import TextCleaner
 
         # 1. Charger le modèle TensorFlow
-        self.keras_model = tf.keras.models.load_model(
-            context.artifacts["keras_model"]
-        )
+        self.keras_model = tf.keras.models.load_model(context.artifacts["keras_model"])
 
         # 2. Charger l'embedding Word2Vec
-        with open(context.artifacts["word2vec_embedding"], 'rb') as f:
+        with open(context.artifacts["word2vec_embedding"], "rb") as f:
             self.word2vec_embedding = pickle.load(f)
 
         # 3. Initialiser le TextCleaner
@@ -52,7 +50,7 @@ class Word2VecSentimentModel(mlflow.pyfunc.PythonModel):
         # 4. Récupérer la technique depuis le fichier artifact
         technique_path = context.artifacts.get("technique")
         if technique_path and os.path.exists(technique_path):
-            with open(technique_path, 'r') as f:
+            with open(technique_path, "r") as f:
                 self.technique = f.read().strip()
         else:
             self.technique = "stemming"  # Valeur par défaut
@@ -72,9 +70,9 @@ class Word2VecSentimentModel(mlflow.pyfunc.PythonModel):
         """
         # Gérer différents formats d'entrée
         if isinstance(model_input, pd.DataFrame):
-            if 'text' not in model_input.columns:
+            if "text" not in model_input.columns:
                 raise ValueError("DataFrame doit contenir une colonne 'text'")
-            texts = model_input['text'].tolist()
+            texts = model_input["text"].tolist()
         elif isinstance(model_input, list):
             texts = model_input
         elif isinstance(model_input, str):
@@ -84,29 +82,17 @@ class Word2VecSentimentModel(mlflow.pyfunc.PythonModel):
 
         # Pipeline de prédiction
         # 1. Preprocessing
-        cleaned_texts = self.text_cleaner.preprocess_with_techniques(
-            texts,
-            technique=self.technique
-        )
+        cleaned_texts = self.text_cleaner.preprocess_with_techniques(texts, technique=self.technique)
 
         # 2. Transformation en embeddings Word2Vec
         embeddings = self.word2vec_embedding.transform(
-            cleaned_texts,
-            max_len=self.max_len,
-            average=False  # Séquences pour LSTM
+            cleaned_texts, max_len=self.max_len, average=False  # Séquences pour LSTM
         )
 
         # 3. Prédiction
         predictions_proba = self.keras_model.predict(embeddings, verbose=0)
         predictions = (predictions_proba > 0.5).astype(int).flatten()
-        confidences = np.where(
-            predictions == 1,
-            predictions_proba.flatten(),
-            1 - predictions_proba.flatten()
-        )
+        confidences = np.where(predictions == 1, predictions_proba.flatten(), 1 - predictions_proba.flatten())
 
         # Retourner DataFrame avec prédictions et confidences
-        return pd.DataFrame({
-            'sentiment': predictions,
-            'confidence': confidences
-        })
+        return pd.DataFrame({"sentiment": predictions, "confidence": confidences})

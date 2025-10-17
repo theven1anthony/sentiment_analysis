@@ -40,7 +40,7 @@ class SimpleSentimentModel:
             lowercase=False,  # Déjà en minuscules après preprocessing
             min_df=2,
             max_df=0.95,
-            token_pattern=r'\b\w+\b'  # Pattern simple pour tokens déjà nettoyés
+            token_pattern=r"\b\w+\b",  # Pattern simple pour tokens déjà nettoyés
         )
 
     def _create_classifier(self):
@@ -52,15 +52,13 @@ class SimpleSentimentModel:
         vectorizer = self._create_vectorizer()
         classifier = self._create_classifier()
 
-        self.pipeline = Pipeline([
-            ('vectorizer', vectorizer),
-            ('classifier', classifier)
-        ])
+        self.pipeline = Pipeline([("vectorizer", vectorizer), ("classifier", classifier)])
 
         return self.pipeline
 
-    def train(self, X_train: pd.Series, y_train: pd.Series,
-              X_val: pd.Series = None, y_val: pd.Series = None) -> Dict[str, Any]:
+    def train(
+        self, X_train: pd.Series, y_train: pd.Series, X_val: pd.Series = None, y_val: pd.Series = None
+    ) -> Dict[str, Any]:
         """
         Entraîne le modèle.
 
@@ -86,25 +84,25 @@ class SimpleSentimentModel:
         self.training_time = time.time() - start_time
 
         # Récupérer les noms des features
-        self.feature_names = self.pipeline.named_steps['vectorizer'].get_feature_names_out()
+        self.feature_names = self.pipeline.named_steps["vectorizer"].get_feature_names_out()
 
         # Évaluation sur les données d'entraînement
         train_pred = self.pipeline.predict(X_train)
         train_metrics = self._compute_metrics(y_train, train_pred)
 
         results = {
-            'model_type': 'logistic',
-            'vectorizer_type': 'tfidf',
-            'training_time': self.training_time,
-            'n_features': len(self.feature_names),
-            'train_metrics': train_metrics
+            "model_type": "logistic",
+            "vectorizer_type": "tfidf",
+            "training_time": self.training_time,
+            "n_features": len(self.feature_names),
+            "train_metrics": train_metrics,
         }
 
         # Évaluation sur les données de validation si disponibles
         if X_val is not None and y_val is not None:
             val_pred = self.pipeline.predict(X_val)
             val_metrics = self._compute_metrics(y_val, val_pred)
-            results['val_metrics'] = val_metrics
+            results["val_metrics"] = val_metrics
 
         return results
 
@@ -164,10 +162,10 @@ class SimpleSentimentModel:
             Dictionnaire avec les métriques
         """
         return {
-            'accuracy': accuracy_score(y_true, y_pred),
-            'precision': precision_score(y_true, y_pred, average='weighted'),
-            'recall': recall_score(y_true, y_pred, average='weighted'),
-            'f1_score': f1_score(y_true, y_pred, average='weighted')
+            "accuracy": accuracy_score(y_true, y_pred),
+            "precision": precision_score(y_true, y_pred, average="weighted"),
+            "recall": recall_score(y_true, y_pred, average="weighted"),
+            "f1_score": f1_score(y_true, y_pred, average="weighted"),
         }
 
     def save_model(self, filepath: str):
@@ -181,11 +179,11 @@ class SimpleSentimentModel:
             raise ValueError("Le modèle n'est pas encore entraîné")
 
         model_data = {
-            'pipeline': self.pipeline,
-            'model_type': 'logistic',
-            'vectorizer_type': 'tfidf',
-            'training_time': self.training_time,
-            'feature_names': self.feature_names
+            "pipeline": self.pipeline,
+            "model_type": "logistic",
+            "vectorizer_type": "tfidf",
+            "training_time": self.training_time,
+            "feature_names": self.feature_names,
         }
 
         joblib.dump(model_data, filepath)
@@ -199,12 +197,11 @@ class SimpleSentimentModel:
         """
         model_data = joblib.load(filepath)
 
-        self.pipeline = model_data['pipeline']
-        self.training_time = model_data.get('training_time')
-        self.feature_names = model_data.get('feature_names')
+        self.pipeline = model_data["pipeline"]
+        self.training_time = model_data.get("training_time")
+        self.feature_names = model_data.get("feature_names")
 
-    def hyperparameter_tuning(self, X_train: pd.Series, y_train: pd.Series,
-                            cv: int = 5) -> Dict[str, Any]:
+    def hyperparameter_tuning(self, X_train: pd.Series, y_train: pd.Series, cv: int = 5) -> Dict[str, Any]:
         """
         Optimisation des hyperparamètres.
         Répond aux critères d'évaluation CE5: optimisation d'au moins un hyperparamètre.
@@ -222,21 +219,14 @@ class SimpleSentimentModel:
 
         # Paramètres à optimiser pour Logistic Regression + TF-IDF
         param_grid = {
-            'classifier__C': [0.1, 1.0, 10.0],
-            'classifier__penalty': ['l2'],
-            'vectorizer__max_features': [5000, 10000],
-            'vectorizer__ngram_range': [(1, 1), (1, 2)]
+            "classifier__C": [0.1, 1.0, 10.0],
+            "classifier__penalty": ["l2"],
+            "vectorizer__max_features": [5000, 10000],
+            "vectorizer__ngram_range": [(1, 1), (1, 2)],
         }
 
         # Grid search
-        grid_search = GridSearchCV(
-            self.pipeline,
-            param_grid,
-            cv=cv,
-            scoring='f1_weighted',
-            n_jobs=-1,
-            verbose=1
-        )
+        grid_search = GridSearchCV(self.pipeline, param_grid, cv=cv, scoring="f1_weighted", n_jobs=-1, verbose=1)
 
         start_time = time.time()
         grid_search.fit(X_train, y_train)
@@ -246,16 +236,16 @@ class SimpleSentimentModel:
         self.pipeline = grid_search.best_estimator_
 
         return {
-            'best_params': grid_search.best_params_,
-            'best_score': grid_search.best_score_,
-            'tuning_time': tuning_time,
-            'cv_results': grid_search.cv_results_
+            "best_params": grid_search.best_params_,
+            "best_score": grid_search.best_score_,
+            "tuning_time": tuning_time,
+            "cv_results": grid_search.cv_results_,
         }
 
 
-def train_simple_model(X_train: pd.Series, y_train: pd.Series,
-                      X_val: pd.Series, y_val: pd.Series,
-                      X_test: pd.Series, y_test: pd.Series) -> Tuple[SimpleSentimentModel, Dict[str, float], Dict[str, str]]:
+def train_simple_model(
+    X_train: pd.Series, y_train: pd.Series, X_val: pd.Series, y_val: pd.Series, X_test: pd.Series, y_test: pd.Series
+) -> Tuple[SimpleSentimentModel, Dict[str, float], Dict[str, str]]:
     """
     Entraîne le modèle simple de référence (Logistic Regression + TF-IDF).
     Format standard MLflow: retourne (model, metrics, artifacts).
@@ -283,9 +273,10 @@ def train_simple_model(X_train: pd.Series, y_train: pd.Series,
     auc_score = None
     try:
         from sklearn.metrics import roc_auc_score
+
         y_pred_proba = model.predict_proba(X_test)
         auc_score = roc_auc_score(y_test, y_pred_proba[:, 1])
-        test_metrics['auc_score'] = auc_score
+        test_metrics["auc_score"] = auc_score
     except Exception as e:
         print(f"  - Impossible de calculer l'AUC: {e}")
 
@@ -297,16 +288,16 @@ def train_simple_model(X_train: pd.Series, y_train: pd.Series,
 
     # Format pour MLflow
     metrics = {
-        'accuracy': test_metrics['accuracy'],
-        'f1_score': test_metrics['f1_score'],
-        'precision': test_metrics['precision'],
-        'recall': test_metrics['recall'],
-        'training_time': train_results['training_time']
+        "accuracy": test_metrics["accuracy"],
+        "f1_score": test_metrics["f1_score"],
+        "precision": test_metrics["precision"],
+        "recall": test_metrics["recall"],
+        "training_time": train_results["training_time"],
     }
 
     # Ajouter AUC si calculée
-    if 'auc_score' in test_metrics:
-        metrics['auc_score'] = test_metrics['auc_score']
+    if "auc_score" in test_metrics:
+        metrics["auc_score"] = test_metrics["auc_score"]
 
     artifacts = {}  # Pas d'artifacts spéciaux pour le modèle simple
 
