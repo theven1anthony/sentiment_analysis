@@ -16,12 +16,13 @@ st.set_page_config(
 )
 
 # Configuration de l'API
-# Utiliser la variable d'environnement si définie (Docker), sinon localhost
-default_api_url = os.getenv("API_URL", "http://localhost:8000")
+# Par défaut : serveur de production Azure
+# Variable d'environnement API_URL pour override (Docker ou développement local)
+default_api_url = os.getenv("API_URL", "https://sentiment-api-at2025.azurewebsites.net")
 API_URL = st.sidebar.text_input(
     "URL de l'API",
     value=default_api_url,
-    help="URL de base de l'API FastAPI"
+    help="URL de base de l'API FastAPI (production Azure par défaut)"
 )
 
 # Titre principal
@@ -238,5 +239,6 @@ st.markdown("---")
 # Footer
 st.caption("""
 **Air Paradis - Analyse de Sentiment** | Projet MLOps OpenClassrooms
-Documentation API: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+Documentation API: [Production Azure](https://sentiment-api-at2025.azurewebsites.net/docs) | [Local](http://localhost:8000/docs)
 """)
