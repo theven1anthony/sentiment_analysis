@@ -79,12 +79,12 @@ services:
       - ./src:/app/src
       - ./models:/app/models
     environment:
-      - API_URL=http://api:8000
+      # Par défaut: API de production Azure
+      # Pour tester en local avec l'API Docker: API_URL=http://api:8000
+      - API_URL=https://sentiment-api-at2025.azurewebsites.net
     command: streamlit run interface/app.py --server.port=8501 --server.address=0.0.0.0
     networks:
       - sentiment_net
-    depends_on:
-      - api
 
 networks:
   sentiment_net:
