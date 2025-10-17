@@ -63,10 +63,15 @@ jobs:
           package: ./deploy-package
 
       - name: Configuration des variables d'environnement Azure
-        uses: azure/appservice-settings@v1
-        with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          app-settings-json: '${{ secrets.AZURE_APP_SETTINGS_JSON }}'
+        run: |
+          az webapp config appsettings set \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --settings \
+              MODEL_PATH="./models/production/pyfunc_model/model" \
+              WEBSITES_PORT="8000" \
+              SCM_DO_BUILD_DURING_DEPLOYMENT="true" \
+              APPLICATIONINSIGHTS_CONNECTION_STRING="${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}"
 
       - name: Configuration du startup command
         run: |
