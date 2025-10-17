@@ -89,3 +89,4 @@ aws-credentials.json
 /mlruns/
 /generate_mlflow_report.py
 /memory_monitor_*.csv
+logs-azure/

@@ -38,7 +38,9 @@ class AzureMonitor:
         # Configurer Azure Monitor si connection string disponible
         if self.connection_string:
             try:
-                configure_azure_monitor(connection_string=self.connection_string)
+                # configure_azure_monitor() lit automatiquement depuis APPLICATIONINSIGHTS_CONNECTION_STRING
+                # Il ne faut PAS passer la connection string en paramètre
+                configure_azure_monitor()
                 self.tracer = trace.get_tracer(__name__)
                 self.meter = metrics.get_meter(__name__)
                 self.logger.info("Azure Monitor configuré avec succès")
