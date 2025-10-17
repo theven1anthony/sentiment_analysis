@@ -460,16 +460,33 @@ docker-compose down
 - Documentation API : http://localhost:8000/docs
 
 ### Déploiement cloud (Azure)
-```bash
-# Déploiement automatique via GitHub Actions
-# - Push vers la branche main déclenche le déploiement
-# - Azure App Service (Free tier F1)
-# - Pipeline CI/CD avec GitHub Actions
-# - Monitoring Azure Application Insights
 
-# URL de production
-https://sentiment-api-at2025.azurewebsites.net
+Le projet est déployé automatiquement sur Azure App Service via GitHub Actions.
+
+**URL de production :** https://sentiment-api-at2025.azurewebsites.net
+
+**Endpoints disponibles :**
+```bash
+# Health check
+curl https://sentiment-api-at2025.azurewebsites.net/health
+
+# Prédiction de sentiment
+curl -X POST "https://sentiment-api-at2025.azurewebsites.net/predict" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "I love this product!"}'
+
+# Informations du modèle
+curl https://sentiment-api-at2025.azurewebsites.net/model/info
+
+# Documentation interactive
+https://sentiment-api-at2025.azurewebsites.net/docs
 ```
+
+**Configuration du déploiement :**
+- Azure App Service (Free tier F1)
+- Pipeline CI/CD : GitHub Actions (`.github/workflows/deploy.yml`)
+- Monitoring : Azure Application Insights
+- Déploiement automatique sur push vers `main`
 
 **Documentation complète du déploiement :**
 - Configuration Azure : `docs/azure_configuration.md`
