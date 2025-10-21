@@ -204,7 +204,7 @@ az monitor action-group show \
 
 **Alerte principale : Misclassifications (3 tweets mal classés en 5 minutes)**
 
-Cette alerte surveille les événements customEvents dans Application Insights pour détecter quand l'API FastAPI log un événement `alert_triggered` avec le type `high_misclassification_rate`.
+Cette alerte surveille les logs applicatifs (traces) dans Application Insights pour détecter quand l'API FastAPI log un message d'alerte concernant les misclassifications.
 
 ```bash
 # Créer l'alerte scheduled query pour les misclassifications
@@ -212,20 +212,23 @@ az monitor scheduled-query create \
   --name high-misclassification-rate \
   --resource-group sentiment-analysis-rg \
   --scopes $(az monitor app-insights component show --app sentiment-api-insights --resource-group sentiment-analysis-rg --query id -o tsv) \
-  --condition "count 'MisclassificationEvents' > 0" \
-  --condition-query MisclassificationEvents="customEvents | where name == 'alert_triggered' and customDimensions.alert_type == 'high_misclassification_rate'" \
+  --condition "count 'AlertEvents' > 0" \
+  --condition-query AlertEvents="traces | where message contains 'Alerte déclenchée' and message contains 'high_misclassification_rate'" \
   --window-size 5m \
   --evaluation-frequency 5m \
   --action-groups $(az monitor action-group show --name sentiment-alerts --resource-group sentiment-analysis-rg --query id -o tsv) \
-  --description "Alerte déclenchée si 3 tweets mal classés en 5 minutes (detecté par l'API)" \
+  --description "Alerte si 3+ tweets mal classés en 5 minutes (logs traces)" \
   --severity 2
 ```
 
 **Fonctionnement** :
 1. L'endpoint `/feedback` de l'API détecte quand 3 tweets sont mal classés en 5 minutes
-2. L'API log un événement `alert_triggered` dans Application Insights
-3. Azure Monitor exécute cette requête toutes les 5 minutes
-4. Si l'événement est détecté, l'Action Group est déclenché (email/SMS envoyé)
+2. L'API log un message d'alerte via le logger Python (niveau ERROR)
+3. Azure Monitor OpenTelemetry envoie les logs dans la table `traces` d'Application Insights
+4. Azure Monitor exécute cette requête KQL toutes les 5 minutes
+5. Si le message d'alerte est détecté, l'Action Group est déclenché (email envoyé)
+
+**Note importante** : La requête utilise la table `traces` car OpenTelemetry avec `azure-monitor-opentelemetry` envoie les logs Python standard dans cette table, et non dans `customEvents`.
 
 **Vérifier l'alerte** :
 

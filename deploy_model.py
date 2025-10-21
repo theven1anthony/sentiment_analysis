@@ -97,15 +97,33 @@ def deploy_model_from_registry(model_name, model_version=1):
         else:
             os.makedirs(PRODUCTION_DIR, exist_ok=True)
 
-        # 5. Télécharger le modèle pyfunc complet depuis MLflow
+        # 5. Télécharger le modèle pyfunc complet depuis MLflow Model Registry
+        # Télécharger dans un dossier temporaire d'abord
+        temp_download_path = os.path.join(PRODUCTION_DIR, "temp_download")
+        print(f"\nTéléchargement du modèle complet dans: {temp_download_path}")
+
+        # Utiliser l'URI du Model Registry (pas du run) car le modèle est stocké là
+        # Format: models:/<model_name>/<version>
+        artifact_path = f"models:/{model_name}/{model_version}"
+        downloaded_path = mlflow.artifacts.download_artifacts(artifact_path, dst_path=temp_download_path)
+
+        print(f"✓ Modèle pyfunc téléchargé depuis Model Registry")
+
+        # 5b. Réorganiser pour créer la structure pyfunc_model/model/ attendue par l'API
         pyfunc_model_path = os.path.join(PRODUCTION_DIR, "pyfunc_model")
-        print(f"\nTéléchargement du modèle complet dans: {pyfunc_model_path}")
+        model_subdir = os.path.join(pyfunc_model_path, "model")
+        os.makedirs(model_subdir, exist_ok=True)
 
-        # Télécharger tous les artefacts du modèle
-        artifact_path = f"runs:/{run_id}/model"
-        downloaded_path = mlflow.artifacts.download_artifacts(artifact_path, dst_path=pyfunc_model_path)
+        # Déplacer tous les fichiers téléchargés dans le sous-dossier model/
+        print(f"\nRéorganisation de la structure pour compatibilité avec l'API...")
+        for item in os.listdir(temp_download_path):
+            src = os.path.join(temp_download_path, item)
+            dst = os.path.join(model_subdir, item)
+            shutil.move(src, dst)
 
-        print(f"✓ Modèle pyfunc téléchargé (utilisable sans MLflow)")
+        # Supprimer le dossier temporaire
+        os.rmdir(temp_download_path)
+        print(f"✓ Structure créée: {model_subdir}")
 
         # 6. Créer les métadonnées
         metadata = {

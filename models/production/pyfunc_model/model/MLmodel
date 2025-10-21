@@ -1,16 +1,16 @@
-artifact_path: mlflow-artifacts:/563116797599679167/models/m-8e0d848f8bad4deab18606691fe61d28/artifacts
+artifact_path: mlflow-artifacts:/815646846974477542/models/m-e991fb2af9784700aada3d07d915bca8/artifacts
 flavors:
   python_function:
     artifacts:
       keras_model:
         path: artifacts/keras_model.keras
-        uri: /tmp/tmp946yx_yf/keras_model.keras
+        uri: /tmp/tmp3bwp76gu/keras_model.keras
       technique:
         path: artifacts/technique.txt
-        uri: /tmp/tmp946yx_yf/technique.txt
+        uri: /tmp/tmp3bwp76gu/technique.txt
       word2vec_embedding:
         path: artifacts/word2vec_embedding.pkl
-        uri: /tmp/tmp946yx_yf/word2vec_embedding.pkl
+        uri: /tmp/tmp3bwp76gu/word2vec_embedding.pkl
     cloudpickle_version: 3.1.1
     code: null
     env:
@@ -21,9 +21,9 @@ flavors:
     python_version: 3.12.11
     streamable: false
 mlflow_version: 3.4.0
-model_id: m-8e0d848f8bad4deab18606691fe61d28
-model_size_bytes: 21492497
-model_uuid: m-8e0d848f8bad4deab18606691fe61d28
+model_id: m-e991fb2af9784700aada3d07d915bca8
+model_size_bytes: 51207536
+model_uuid: m-e991fb2af9784700aada3d07d915bca8
 prompts: null
-run_id: 6e0d136b138248ee9d92f4473c248592
-utc_time_created: '2025-10-09 06:58:57.641778'
+run_id: c6c5815bf81843488dbdcfcffa72072c
+utc_time_created: '2025-10-10 03:57:01.109629'
