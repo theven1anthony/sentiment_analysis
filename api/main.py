@@ -161,6 +161,9 @@ async def predict(request: PredictRequest):
         )
 
     try:
+        # Mesurer le temps de prédiction
+        start_time = datetime.now()
+
         # Le modèle pyfunc gère tout le pipeline (preprocessing + embedding + prédiction)
         # On passe directement le texte brut
         input_df = pd.DataFrame({"text": [request.text]})
@@ -172,9 +175,25 @@ async def predict(request: PredictRequest):
         sentiment = int(predictions["sentiment"].iloc[0])
         confidence = float(predictions["confidence"].iloc[0])
 
+        # Calculer la latence
+        prediction_time_ms = (datetime.now() - start_time).total_seconds() * 1000
+
         # Générer ID et timestamp
         prediction_id = f"pred_{uuid.uuid4().hex[:8]}"
         timestamp = datetime.now().isoformat()
+
+        # Logger la prédiction dans Azure Application Insights
+        if AZURE_MONITOR_ENABLED and azure_monitor:
+            model_name = model_metadata.get("model_name", "unknown")
+            model_version = model_metadata.get("model_version", "unknown")
+
+            azure_monitor.log_prediction_metrics(
+                model_name=model_name,
+                model_version=model_version,
+                prediction_time_ms=prediction_time_ms,
+                confidence=confidence,
+                is_correct=None  # Pas de ground truth lors de la prédiction
+            )
 
         return PredictResponse(
             sentiment=sentiment,
