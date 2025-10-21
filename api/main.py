@@ -192,6 +192,8 @@ async def predict(request: PredictRequest):
                 model_version=model_version,
                 prediction_time_ms=prediction_time_ms,
                 confidence=confidence,
+                sentiment=sentiment,  # Ajouter le sentiment prédit
+                text=request.text,  # Ajouter le texte du tweet
                 is_correct=None  # Pas de ground truth lors de la prédiction
             )
 

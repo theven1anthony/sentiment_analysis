@@ -72,6 +72,8 @@ class AzureMonitor:
         model_version: str,
         prediction_time_ms: float,
         confidence: float,
+        sentiment: Optional[int] = None,
+        text: Optional[str] = None,
         is_correct: Optional[bool] = None,
     ):
         """
@@ -82,6 +84,8 @@ class AzureMonitor:
             model_version: Version du modèle
             prediction_time_ms: Temps de prédiction en millisecondes
             confidence: Niveau de confiance de la prédiction
+            sentiment: Sentiment prédit (0=négatif, 1=positif)
+            text: Texte du tweet (tronqué si > 200 caractères)
             is_correct: Si la prédiction est correcte (optionnel)
         """
         if not self.tracer:
@@ -95,12 +99,25 @@ class AzureMonitor:
                 span.set_attribute("prediction.latency_ms", prediction_time_ms)
                 span.set_attribute("prediction.confidence", confidence)
 
+                # Ajouter le sentiment prédit
+                if sentiment is not None:
+                    span.set_attribute("prediction.sentiment", sentiment)
+                    sentiment_label = "négatif" if sentiment == 0 else "positif"
+                    span.set_attribute("prediction.sentiment_label", sentiment_label)
+
+                # Ajouter le texte du tweet (tronqué pour éviter trop de données)
+                if text is not None:
+                    # Limiter à 200 caractères pour éviter surcharge
+                    text_truncated = text[:200] if len(text) > 200 else text
+                    span.set_attribute("prediction.text", text_truncated)
+
                 if is_correct is not None:
                     span.set_attribute("prediction.is_correct", is_correct)
 
                 self.logger.info(
                     f"Prédiction loggée: {model_name}@{model_version} - "
-                    f"Latence: {prediction_time_ms:.2f}ms, Confiance: {confidence:.3f}"
+                    f"Latence: {prediction_time_ms:.2f}ms, Confiance: {confidence:.3f}, "
+                    f"Sentiment: {sentiment_label if sentiment is not None else 'N/A'}"
                 )
         except Exception as e:
             self.logger.error(f"Erreur lors du log de métriques: {str(e)}")
