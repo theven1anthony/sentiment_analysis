@@ -294,7 +294,7 @@ class TextCleaner:
         use_stemming: bool = False,
         use_lemmatization: bool = True,
         remove_stopwords: bool = True,
-        handle_negations: bool = True,
+        handle_negations: bool = False,
         handle_emotions: bool = True,
     ) -> str:
         """
@@ -311,7 +311,8 @@ class TextCleaner:
         if handle_emotions:
             text = self.handle_emotions(text)
 
-        # 3. Gestion des négations (AVANT le nettoyage pour garder la ponctuation)
+        # 3. Gestion des négations (désactivée par défaut)
+        # Le LSTM capture naturellement les négations dans le contexte
         if handle_negations:
             text = self.handle_negations(text)
 
@@ -346,7 +347,7 @@ class TextCleaner:
         self,
         texts: List[str],
         technique: str = "lemmatization",
-        handle_negations: bool = True,
+        handle_negations: bool = False,
         handle_emotions: bool = True,
     ) -> List[str]:
         """
@@ -355,11 +356,14 @@ class TextCleaner:
         Args:
             texts: Liste des textes à traiter
             technique: 'stemming', 'lemmatization', ou 'basic'
-            handle_negations: Activer la gestion intelligente des négations
+            handle_negations: Activer la gestion intelligente des négations (désactivé par défaut)
             handle_emotions: Activer la préservation des émoticons
 
         Returns:
             Textes prétraités selon la technique choisie
+
+        Note: handle_negations désactivé par défaut car le LSTM capture naturellement
+        les négations dans le contexte séquentiel.
         """
         if technique == "stemming":
             return [
