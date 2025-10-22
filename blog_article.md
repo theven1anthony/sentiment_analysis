@@ -1000,11 +1000,10 @@ RAM requise        : 9 GB (entraînement), < 1 GB (inférence)
 - Interface Streamlit : Tests interactifs
 - Docker Compose : Environnement reproductible
 
-**TODO restants (critiques pour évaluation) :**
+**Livrables du projet :**
 - ✅ Optimisation hyperparamètres
 - ✅ Déploiement Azure production
 - ✅ Monitoring Application Insights complet
-- ⏳ Présentation PowerPoint résultats
 
 ---
 

@@ -41,21 +41,49 @@ streamlit run interface/app.py
 ```
 
 **Avec Docker (recommandé) :**
-```bash
-# Lancer Streamlit + API automatiquement
-docker-compose up streamlit
 
-# Lancer tout le stack (Streamlit + API + MLflow)
-docker-compose up streamlit api mlflow
+**Option A : Utiliser l'API de production Azure (par défaut)**
+```bash
+# Streamlit pointe vers https://sentiment-api-at2025.azurewebsites.net
+docker-compose up streamlit
 
 # En arrière-plan
 docker-compose up -d streamlit
+```
 
-# Arrêter les services
+**Option B : Utiliser l'API Docker locale**
+```bash
+# 1. Modifier docker-compose.yml ligne 84 :
+#    Changer : API_URL=https://sentiment-api-at2025.azurewebsites.net
+#    En     : API_URL=http://api:8000
+
+# 2. Lancer API + Streamlit ensemble
+docker-compose up api streamlit
+
+# Ou tout le stack (API + Streamlit + MLflow)
+docker-compose up streamlit api mlflow
+
+# En arrière-plan
+docker-compose up -d api streamlit
+```
+
+**Option C : Override via variable d'environnement**
+```bash
+# Sans modifier docker-compose.yml
+docker-compose run -e API_URL=http://api:8000 -p 8501:8501 streamlit
+```
+
+**Arrêter les services :**
+```bash
 docker-compose down
 ```
 
 L'interface sera accessible sur : http://localhost:8501
+
+**Note importante sur Docker :**
+- Utiliser `http://api:8000` (nom du service Docker) et NON `http://localhost:8000`
+- Les conteneurs communiquent via le réseau `sentiment_net`
+- L'URL peut être modifiée dans l'interface via la barre latérale
 
 ## Utilisation
 
