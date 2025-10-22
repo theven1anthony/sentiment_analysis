@@ -90,10 +90,10 @@ L'analyse des courbes d'apprentissage Word2Vec LSTM sur 50k révèle un gap trai
 | **200k** | **0.7945** | **0.8786** | **0.073** | **0.447** | **38 min** |
 
 **Validation de l'hypothèse :**
-- ✅ Gap train/val réduit de 21% (0.096 → 0.073)
-- ✅ Val loss plus stable et plus basse (-11%)
-- ✅ Amélioration continue du F1-Score (+2.5% puis +1.3%)
-- ✅ Meilleure généralisation validée
+- Gap train/val réduit de 21% (0.096 → 0.073)
+- Val loss plus stable et plus basse (-11%)
+- Amélioration continue du F1-Score (+2.5% puis +1.3%)
+- Meilleure généralisation validée
 
 **Limite matérielle atteinte :** 8.73/11.67 GB RAM utilisés (75%), impossible d'augmenter au-delà sans risque OOM.
 
@@ -110,7 +110,7 @@ L'analyse des courbes d'apprentissage Word2Vec LSTM sur 50k révèle un gap trai
 
 ## Optimisation des Hyperparamètres
 
-**Objectif :** Atteindre F1 ≥ 0.80 (baseline : 0.7945)
+**Objectif :** Atteindre F1 >= 0.80 (baseline : 0.7945)
 
 ### Stratégie Random Search
 
@@ -135,7 +135,7 @@ AUC-ROC     : 0.8801
 Temps       : 132 min (vs 38 min baseline)
 ```
 
-✅ **Objectif F1 ≥ 0.80 atteint** (0.7983 ≈ 0.80)
+**Objectif F1 >= 0.80 atteint** (0.7983 ~= 0.80)
 
 Le compromis 3.5x plus de temps pour +0.48% F1 est acceptable car l'entraînement est périodique (mensuel) tandis que l'amélioration bénéficie à chaque prédiction en temps réel.
 
@@ -143,19 +143,49 @@ Le compromis 3.5x plus de temps pour +0.48% F1 est acceptable car l'entraînemen
 
 ## Pipeline MLOps et Déploiement
 
-### Infrastructure mise en place
+### Tracking des expérimentations avec MLflow
 
-**Tracking et versioning :**
-- MLflow pour tracking des expérimentations (30+ runs, 6 expérimentations)
-- Model Registry pour versioning centralisé
-- Git pour versioning du code
+MLflow assure le tracking de toutes les expérimentations avec 30+ runs répartis sur 6 expérimentations distinctes.
 
-**Pipeline CI/CD :**
-- GitHub Actions : Tests automatisés (pytest, black, flake8)
-- Déploiement automatique sur Azure App Service (push sur `main`)
-- Health check automatique post-déploiement
+![Liste des expérimentations MLflow](imgs/mlflow_ui_experiment_list.png)
+*Figure 1 : Vue d'ensemble des expérimentations dans MLflow UI*
 
-**Stack de production :**
+Chaque run enregistre automatiquement les hyperparamètres, métriques (F1-Score, Accuracy, AUC), et artefacts (modèle, embeddings).
+
+![Détails d'un run MLflow](imgs/mlflow_ui_run_overview.png)
+*Figure 2 : Vue détaillée d'un run avec métriques et paramètres*
+
+Les courbes d'apprentissage permettent de diagnostiquer les problèmes de généralisation et valider les hypothèses.
+
+![Courbes d'apprentissage](imgs/mlflow_ui_run_learning_curve.png)
+*Figure 3 : Courbes de loss montrant la convergence du modèle*
+
+Le Model Registry centralise les versions déployables avec leur statut (Staging, Production).
+
+![Versions du modèle](imgs/mlflow_ui_model_version_list.png)
+*Figure 4 : Gestion des versions du modèle w2v_200K_model*
+
+### Versioning et CI/CD
+
+**Git et GitHub Actions :**
+
+L'historique complet du projet est versionné dans Git avec plus de 47 commits documentant l'évolution du projet.
+
+![Historique des commits](imgs/github_commit_list.png)
+*Figure 5 : Historique Git montrant la progression du projet*
+
+**Pipeline CI (Tests automatisés) :**
+
+![GitHub Actions CI](imgs/github_action_ci.png)
+*Figure 6 : Pipeline CI exécutant pytest, black, flake8*
+
+**Pipeline CD (Déploiement Azure) :**
+
+![GitHub Actions CD](imgs/github_action_cd.png)
+*Figure 7 : Déploiement automatique sur Azure App Service*
+
+### Stack de production
+
 - API FastAPI avec 4 endpoints (/predict, /feedback, /health, /model/info)
 - Modèle pyfunc MLflow (pipeline complet : preprocessing + embedding + prédiction)
 - Azure App Service Free-tier F1 (1 GB RAM, 1 GB storage)
@@ -181,6 +211,21 @@ Le compromis 3.5x plus de temps pour +0.48% F1 est acceptable car l'entraînemen
 - Latence P95 > 200ms pendant 10 minutes
 - Taux erreur > 5% sur 1 heure
 
+Azure Application Insights collecte toutes les prédictions et permet l'analyse via des requêtes KQL.
+
+![Prédictions dans Azure Insights](imgs/azure_insight_prediction_kql_result.png)
+*Figure 8 : Visualisation des prédictions avec sentiment et confiance*
+
+Les misclassifications détectées via le feedback utilisateur déclenchent des alertes automatiques.
+
+![Alertes déclenchées](imgs/azure_insight_alert_triggered_kql_result.png)
+*Figure 9 : Requête KQL montrant les alertes de misclassification*
+
+Les notifications par email permettent une réaction immédiate de l'équipe data science.
+
+![Email d'alerte](imgs/alert_email.png)
+*Figure 10 : Email d'alerte reçu lors du déclenchement du seuil*
+
 **Actions automatisées :**
 - Si 3 misclassifications en 5 min : Notification data science, log détaillé, vérification pattern commun, planification re-entraînement si drift confirmé
 - Si latence excessive : Vérification charge serveur, analyse slow queries, activation cache Redis, scale up si besoin
@@ -195,17 +240,37 @@ Le compromis 3.5x plus de temps pour +0.48% F1 est acceptable car l'entraînemen
 
 ---
 
+## Interface Utilisateur Streamlit
+
+Une interface web interactive a été développée avec Streamlit pour tester l'API en temps réel et faciliter la collecte de feedback utilisateur.
+
+**Fonctionnalités principales :**
+
+L'interface permet de saisir un tweet et obtenir instantanément la prédiction de sentiment avec le niveau de confiance du modèle.
+
+![Analyse de tweet via Streamlit](imgs/streamlit_tweet_analyse.png)
+*Figure 11 : Interface d'analyse de sentiment montrant la prédiction et la confiance*
+
+Un système de feedback permet de corriger les prédictions erronées. Les corrections sont automatiquement envoyées à l'API et enregistrées dans Azure Application Insights pour le monitoring.
+
+![Système de feedback](imgs/streamlit_feedback.png)
+*Figure 12 : Interface de correction de prédiction pour amélioration continue*
+
+L'interface affiche également l'état de l'API en temps réel, les informations du modèle chargé, et les métriques de performance (F1-Score, Accuracy). Elle est déployable via Docker et peut pointer vers l'API locale ou l'API de production Azure.
+
+---
+
 ## Tableau de Synthèse Comparative
 
 ### Récapitulatif final : Tous modèles confondus
 
 | Rang | Modèle | Dataset | F1-Score | Temps | Déploiement | Statut |
 |------|--------|---------|----------|-------|-------------|--------|
-| 🥇 | **Word2Vec LSTM Optimisé** | **200k** | **0.7983** | **132 min** | **✅ CPU** | **Production** |
-| 2 | Word2Vec LSTM | 200k | 0.7945 | 38 min | ✅ CPU | Baseline 200k |
-| 3 | BERT | 50k | 0.7892 | 228 min | ❌ GPU | Écarté |
-| 4 | Word2Vec LSTM | 100k | 0.7846 | 19 min | ✅ CPU | Validation |
-| 5 | TF-IDF Baseline | 50k | 0.7754 | 0.01 min | ✅ CPU | Référence |
+| 1 | **Word2Vec LSTM Optimisé** | **200k** | **0.7983** | **132 min** | **CPU** | **Production** |
+| 2 | Word2Vec LSTM | 200k | 0.7945 | 38 min | CPU | Baseline 200k |
+| 3 | BERT | 50k | 0.7892 | 228 min | GPU | Écarté |
+| 4 | Word2Vec LSTM | 100k | 0.7846 | 19 min | CPU | Validation |
+| 5 | TF-IDF Baseline | 50k | 0.7754 | 0.01 min | CPU | Référence |
 
 **Progression du projet :**
 - Baseline TF-IDF 50k : 0.7754
@@ -262,8 +327,8 @@ Latence inférence  : < 50ms/tweet
 RAM requise        : 9 GB (entraînement), < 1 GB (inférence)
 ```
 
-**Objectif initial** : F1-Score > 75% ✅ **Dépassé de +6.4%**
-**Objectif optimisation** : F1-Score ≥ 0.80 ✅ **Atteint (0.7983 ≈ 0.80)**
+**Objectif initial** : F1-Score > 75% - **Dépassé de +6.4%**
+**Objectif optimisation** : F1-Score >= 0.80 - **Atteint (0.7983 ~= 0.80)**
 
 **Amélioration totale vs baseline initial** : +2.9% (0.7754 → 0.7983)
 
